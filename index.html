@@ -1,0 +1,683 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>NEET MCQ Test Site</title>
+<style>
+  * { box-sizing: border-box; }
+  body { margin: 0; font-family: system-ui, -apple-system, "Segoe UI", Roboto, Arial, sans-serif; background: #f4f6fb; color: #1a2332; }
+  header { background: #1d4ed8; color: #fff; padding: 12px 16px; display: flex; align-items: center; justify-content: space-between; }
+  header .brand { font-size: 19px; font-weight: 700; }
+  header .who { font-size: 13px; opacity: .95; }
+  header button { background: #ffffff22; color: #fff; border: 1px solid #ffffff55; border-radius: 8px; padding: 6px 10px; cursor: pointer; font-size: 13px; }
+  main { max-width: 860px; margin: 0 auto; padding: 16px; }
+  .card { background: #fff; border: 1px solid #dde3ee; border-radius: 12px; padding: 16px; margin-bottom: 14px; }
+  h2 { margin: 4px 0 12px; font-size: 20px; }
+  h3 { margin: 0 0 8px; font-size: 16px; }
+  label { display: block; font-size: 13px; font-weight: 600; margin: 10px 0 4px; }
+  input { width: 100%; padding: 10px; border: 1px solid #c3ccd9; border-radius: 8px; font-size: 15px; }
+  .btn { display: inline-block; background: #1d4ed8; color: #fff; border: none; border-radius: 8px; padding: 10px 16px; font-size: 15px; cursor: pointer; margin-top: 12px; }
+  .btn.secondary { background: #e8edf6; color: #1a2332; }
+  .btn.danger { background: #b91c1c; }
+  .btn:disabled { opacity: .55; cursor: default; }
+  .tabs { display: flex; gap: 8px; margin-bottom: 12px; }
+  .tabs button { flex: 1; padding: 9px; border-radius: 8px; border: 1px solid #c3ccd9; background: #fff; cursor: pointer; font-size: 14px; font-weight: 600; }
+  .tabs button.active { background: #1d4ed8; color: #fff; border-color: #1d4ed8; }
+  .msg { font-size: 14px; margin-top: 10px; min-height: 18px; }
+  .msg.err { color: #b91c1c; }
+  .msg.ok { color: #15803d; }
+  .note { font-size: 13px; color: #5b6b82; }
+  nav.main { display: flex; gap: 8px; flex-wrap: wrap; margin-bottom: 14px; }
+  nav.main button { padding: 8px 12px; border-radius: 999px; border: 1px solid #c3ccd9; background: #fff; cursor: pointer; font-size: 14px; }
+  nav.main button.active { background: #1d4ed8; color: #fff; border-color: #1d4ed8; }
+  table { width: 100%; border-collapse: collapse; font-size: 14px; }
+  th, td { border-bottom: 1px solid #e3e8f2; padding: 7px 6px; text-align: left; }
+  th { color: #5b6b82; font-size: 12px; text-transform: uppercase; letter-spacing: .04em; }
+  .qtext { font-size: 16px; line-height: 1.55; margin-bottom: 12px; }
+  .opt { display: block; width: 100%; text-align: left; padding: 11px 12px; margin-bottom: 8px; border: 1px solid #c3ccd9; border-radius: 8px; background: #fff; cursor: pointer; font-size: 15px; }
+  .opt.sel { border-color: #1d4ed8; background: #eaf1fe; font-weight: 600; }
+  .opt.right { border-color: #15803d; background: #e9f9ee; }
+  .opt.wrong { border-color: #b91c1c; background: #fdeeee; }
+  .palette { display: flex; flex-wrap: wrap; gap: 6px; margin: 12px 0; }
+  .palette button { width: 38px; height: 38px; border-radius: 8px; border: 1px solid #c3ccd9; background: #fff; cursor: pointer; font-size: 13px; }
+  .palette button.answered { background: #15803d; color: #fff; border-color: #15803d; }
+  .palette button.marked { background: #7c3aed; color: #fff; border-color: #7c3aed; }
+  .palette button.ansmarked { background: #15803d; color: #fff; border-color: #7c3aed; box-shadow: inset 0 0 0 2px #7c3aed; }
+  .palette button.current { outline: 2px solid #1d4ed8; outline-offset: 1px; }
+  .timer { font-size: 18px; font-weight: 700; color: #b91c1c; }
+  .row { display: flex; justify-content: space-between; align-items: center; gap: 10px; flex-wrap: wrap; }
+  .score { font-size: 30px; font-weight: 800; }
+  .hidden { display: none; }
+  .tablewrap { overflow-x: auto; }
+</style>
+</head>
+<body>
+<header>
+  <div class="brand">NEET MCQ Test Site</div>
+  <div class="row">
+    <span class="who" id="who"></span>
+    <button id="logoutBtn" class="hidden">Log out</button>
+  </div>
+</header>
+<main>
+  <!-- AUTH -->
+  <section id="authView">
+    <div class="card">
+      <div class="tabs">
+        <button id="tabLogin" class="active">Log in</button>
+        <button id="tabSignup">Sign up</button>
+        <button id="tabForgot">Forgot password</button>
+      </div>
+      <div id="loginForm">
+        <label>Username</label>
+        <input id="liUser" autocomplete="username">
+        <label>Password</label>
+        <input id="liPass" type="password" autocomplete="current-password">
+        <button class="btn" id="loginBtn">Log in</button>
+      </div>
+      <div id="signupForm" class="hidden">
+        <label>Your name</label>
+        <input id="suName" autocomplete="name">
+        <label>Choose a username</label>
+        <input id="suUser" autocomplete="username">
+        <label>Gmail (only for password recovery)</label>
+        <input id="suGmail" type="email" autocomplete="email">
+        <label>Set a password</label>
+        <input id="suPass" type="password" autocomplete="new-password">
+        <button class="btn" id="signupBtn">Create account</button>
+        <p class="note">The first account created on this site becomes the admin (site owner). Every later account is a student account.</p>
+      </div>
+      <div id="forgotForm" class="hidden">
+        <label>Username</label>
+        <input id="fpUser">
+        <label>Gmail used at sign up</label>
+        <input id="fpGmail" type="email">
+        <label>New password</label>
+        <input id="fpPass" type="password" autocomplete="new-password">
+        <button class="btn" id="forgotBtn">Reset password</button>
+        <p class="note">If the username and Gmail match an account, the new password is set right away.</p>
+      </div>
+      <div class="msg" id="authMsg"></div>
+    </div>
+  </section>
+
+  <!-- APP -->
+  <section id="appView" class="hidden">
+    <nav class="main">
+      <button id="navTests" class="active">Tests</button>
+      <button id="navMine">My records</button>
+      <button id="navAdmin" class="hidden">All students</button>
+    </nav>
+
+    <div id="testsView">
+      <div id="testList"></div>
+      <div class="card hidden" id="seedCard">
+        <h3>No test found</h3>
+        <p class="note">Admin: load the starter demo paper (30 questions) into the database.</p>
+        <button class="btn" id="seedBtn">Load demo test</button>
+        <div class="msg" id="seedMsg"></div>
+      </div>
+    </div>
+
+    <div id="runnerView" class="hidden">
+      <div class="card">
+        <div class="row">
+          <h3 id="runTitle"></h3>
+          <span class="timer" id="runTimer"></span>
+        </div>
+        <div class="note" id="runMeta"></div>
+        <div class="palette" id="palette"></div>
+        <div class="qtext" id="qText"></div>
+        <div id="qOpts"></div>
+        <div class="row">
+          <button class="btn secondary" id="prevBtn">Previous</button>
+          <button class="btn secondary" id="markBtn">Mark for review</button>
+          <button class="btn secondary" id="clearBtn">Clear answer</button>
+          <button class="btn secondary" id="nextBtn">Next</button>
+        </div>
+        <button class="btn danger" id="submitBtn">Submit test</button>
+        <div class="msg" id="runMsg"></div>
+      </div>
+    </div>
+
+    <div id="resultView" class="hidden"></div>
+
+    <div id="mineView" class="hidden">
+      <div class="card">
+        <h3>My records</h3>
+        <div class="tablewrap"><table>
+          <thead><tr><th>Date</th><th>Test</th><th>Score</th><th>Right</th><th>Wrong</th><th>Skipped</th><th></th></tr></thead>
+          <tbody id="mineBody"></tbody>
+        </table></div>
+      </div>
+    </div>
+
+    <div id="adminView" class="hidden">
+      <div class="card">
+        <h3>All students</h3>
+        <div class="tablewrap"><table>
+          <thead><tr><th>Username</th><th>Name</th><th>Gmail</th><th>Role</th><th>Attempts</th><th>Best score</th></tr></thead>
+          <tbody id="adminUsers"></tbody>
+        </table></div>
+      </div>
+      <div class="card">
+        <h3>All attempts</h3>
+        <div class="tablewrap"><table>
+          <thead><tr><th>Date</th><th>Student</th><th>Test</th><th>Score</th><th>Right</th><th>Wrong</th><th>Skipped</th></tr></thead>
+          <tbody id="adminAttempts"></tbody>
+        </table></div>
+        <button class="btn" id="csvBtn">Download results sheet (CSV)</button>
+      </div>
+    </div>
+  </section>
+</main>
+<script>
+"use strict";
+const SUPABASE_URL = "https://fxgehbrqmneqkngvagba.supabase.co";
+const SUPABASE_ANON_KEY = "sb_publishable_Y3E5atS38heyeNk4RVavJw_gi1VZICs";
+const API = SUPABASE_URL + "/rest/v1";
+const $ = (id) => document.getElementById(id);
+
+async function db(path, opts) {
+  opts = opts || {};
+  const headers = Object.assign({
+    "apikey": SUPABASE_ANON_KEY,
+    "Authorization": "Bearer " + SUPABASE_ANON_KEY,
+    "Content-Type": "application/json"
+  }, opts.headers || {});
+  const res = await fetch(API + path, Object.assign({}, opts, { headers }));
+  const text = await res.text();
+  let data = null;
+  try { data = text ? JSON.parse(text) : null; } catch (e) { data = null; }
+  if (!res.ok) {
+    const err = new Error((data && (data.message || data.hint)) || ("Request failed: " + res.status));
+    err.code = data && data.code;
+    err.status = res.status;
+    throw err;
+  }
+  return { data, headers: res.headers };
+}
+function countFrom(headers) {
+  const cr = headers.get("content-range") || "";
+  const n = parseInt((cr.split("/")[1] || ""), 10);
+  return isNaN(n) ? 0 : n;
+}
+async function sha256(str) {
+  const buf = await crypto.subtle.digest("SHA-256", new TextEncoder().encode(str));
+  return Array.from(new Uint8Array(buf)).map(b => b.toString(16).padStart(2, "0")).join("");
+}
+function randomSalt() {
+  const a = new Uint8Array(16);
+  crypto.getRandomValues(a);
+  return Array.from(a).map(b => b.toString(16).padStart(2, "0")).join("");
+}
+function esc(s) {
+  const d = document.createElement("div");
+  d.textContent = s == null ? "" : String(s);
+  return d.innerHTML;
+}
+function fmtDate(s) {
+  return s ? new Date(s).toLocaleString("en-IN", { day: "numeric", month: "short", year: "numeric", hour: "numeric", minute: "2-digit" }) : "";
+}
+
+/* ---------- session ---------- */
+let me = null;
+try { me = JSON.parse(localStorage.getItem("neet-session") || "null"); } catch (e) { me = null; }
+function setSession(u) {
+  me = u;
+  if (u) localStorage.setItem("neet-session", JSON.stringify(u));
+  else localStorage.removeItem("neet-session");
+  renderShell();
+}
+function renderShell() {
+  const logged = !!me;
+  $("authView").classList.toggle("hidden", logged);
+  $("appView").classList.toggle("hidden", !logged);
+  $("logoutBtn").classList.toggle("hidden", !logged);
+  $("who").textContent = logged ? (me.username + (me.role === "admin" ? " (admin)" : "")) : "";
+  $("navAdmin").classList.toggle("hidden", !(logged && me.role === "admin"));
+  if (logged) showView("tests");
+}
+$("logoutBtn").addEventListener("click", () => { setSession(null); });
+
+/* ---------- auth tabs ---------- */
+function authTab(which) {
+  $("tabLogin").classList.toggle("active", which === "login");
+  $("tabSignup").classList.toggle("active", which === "signup");
+  $("tabForgot").classList.toggle("active", which === "forgot");
+  $("loginForm").classList.toggle("hidden", which !== "login");
+  $("signupForm").classList.toggle("hidden", which !== "signup");
+  $("forgotForm").classList.toggle("hidden", which !== "forgot");
+  $("authMsg").textContent = "";
+  $("authMsg").className = "msg";
+}
+$("tabLogin").addEventListener("click", () => authTab("login"));
+$("tabSignup").addEventListener("click", () => authTab("signup"));
+$("tabForgot").addEventListener("click", () => authTab("forgot"));
+function authMsg(text, ok) {
+  $("authMsg").textContent = text;
+  $("authMsg").className = "msg " + (ok ? "ok" : "err");
+}
+
+$("signupBtn").addEventListener("click", async () => {
+  const name = $("suName").value.trim();
+  const username = $("suUser").value.trim();
+  const gmail = $("suGmail").value.trim().toLowerCase();
+  const pass = $("suPass").value;
+  if (!username || !gmail || !pass) { authMsg("Fill username, Gmail and password."); return; }
+  if (pass.length < 6) { authMsg("Password must be at least 6 characters."); return; }
+  $("signupBtn").disabled = true;
+  try {
+    const cnt = await db("/users?select=id", { headers: { "Prefer": "count=exact", "Range": "0-0" } });
+    const isFirst = countFrom(cnt.headers) === 0;
+    const salt = randomSalt();
+    const pass_hash = await sha256(salt + ":" + pass);
+    const ins = await db("/users", {
+      method: "POST",
+      headers: { "Prefer": "return=representation" },
+      body: JSON.stringify({ username, name, gmail, pass_hash, salt, role: isFirst ? "admin" : "student" })
+    });
+    const u = ins.data[0];
+    setSession({ id: u.id, username: u.username, name: u.name, gmail: u.gmail, role: u.role });
+  } catch (e) {
+    authMsg(e.code === "23505" ? "That username is taken. Pick another." : ("Sign up failed: " + e.message));
+  }
+  $("signupBtn").disabled = false;
+});
+
+$("loginBtn").addEventListener("click", async () => {
+  const username = $("liUser").value.trim();
+  const pass = $("liPass").value;
+  if (!username || !pass) { authMsg("Enter username and password."); return; }
+  $("loginBtn").disabled = true;
+  try {
+    const r = await db("/users?username=eq." + encodeURIComponent(username) + "&select=id,username,name,gmail,role,pass_hash,salt");
+    const u = (r.data || [])[0];
+    if (!u) { authMsg("No account with that username."); $("loginBtn").disabled = false; return; }
+    const h = await sha256(u.salt + ":" + pass);
+    if (h !== u.pass_hash) { authMsg("Wrong password."); $("loginBtn").disabled = false; return; }
+    setSession({ id: u.id, username: u.username, name: u.name, gmail: u.gmail, role: u.role });
+  } catch (e) {
+    authMsg("Login failed: " + e.message);
+  }
+  $("loginBtn").disabled = false;
+});
+
+$("forgotBtn").addEventListener("click", async () => {
+  const username = $("fpUser").value.trim();
+  const gmail = $("fpGmail").value.trim().toLowerCase();
+  const pass = $("fpPass").value;
+  if (!username || !gmail || !pass) { authMsg("Fill all three fields."); return; }
+  if (pass.length < 6) { authMsg("New password must be at least 6 characters."); return; }
+  $("forgotBtn").disabled = true;
+  try {
+    const r = await db("/users?username=eq." + encodeURIComponent(username) + "&select=id,gmail");
+    const u = (r.data || [])[0];
+    if (!u || (u.gmail || "").toLowerCase() !== gmail) {
+      authMsg("Username and Gmail do not match any account.");
+      $("forgotBtn").disabled = false;
+      return;
+    }
+    const salt = randomSalt();
+    const pass_hash = await sha256(salt + ":" + pass);
+    await db("/users?id=eq." + u.id, { method: "PATCH", body: JSON.stringify({ pass_hash, salt }) });
+    authMsg("Password reset done. Now log in with the new password.", true);
+    authTab("login");
+    authMsg("Password reset done. Now log in with the new password.", true);
+  } catch (e) {
+    authMsg("Reset failed: " + e.message);
+  }
+  $("forgotBtn").disabled = false;
+});
+
+/* ---------- main views ---------- */
+function showView(v) {
+  $("navTests").classList.toggle("active", v === "tests");
+  $("navMine").classList.toggle("active", v === "mine");
+  $("navAdmin").classList.toggle("active", v === "admin");
+  $("testsView").classList.toggle("hidden", v !== "tests");
+  $("mineView").classList.toggle("hidden", v !== "mine");
+  $("adminView").classList.toggle("hidden", v !== "admin");
+  if (v !== "tests") { $("runnerView").classList.add("hidden"); $("resultView").classList.add("hidden"); $("testsView").classList.remove("hidden"); }
+  if (v === "tests") loadTests();
+  if (v === "mine") loadMine();
+  if (v === "admin") loadAdmin();
+}
+$("navTests").addEventListener("click", () => showView("tests"));
+$("navMine").addEventListener("click", () => showView("mine"));
+$("navAdmin").addEventListener("click", () => showView("admin"));
+</script>
+<script>
+"use strict";
+/* ---------- tests list ---------- */
+let testsCache = [];
+async function loadTests() {
+  const list = $("testList");
+  list.innerHTML = '<div class="card"><p class="note">Loading tests...</p></div>';
+  try {
+    const t = await db("/tests?select=id,title,duration_min&order=created_at.asc");
+    testsCache = t.data || [];
+    const a = await db("/attempts?user_id=eq." + me.id + "&select=id,test_id,score");
+    const mine = a.data || [];
+    if (!testsCache.length) {
+      list.innerHTML = "";
+      $("seedCard").classList.toggle("hidden", me.role !== "admin");
+      return;
+    }
+    $("seedCard").classList.add("hidden");
+    list.innerHTML = "";
+    for (const test of testsCache) {
+      const attempts = mine.filter(x => x.test_id === test.id);
+      const best = attempts.length ? Math.max.apply(null, attempts.map(x => x.score)) : null;
+      const card = document.createElement("div");
+      card.className = "card";
+      card.innerHTML = "<h3>" + esc(test.title) + "</h3>" +
+        '<p class="note">Duration: ' + test.duration_min + ' minutes. Marking: +4 for a right answer, -1 for a wrong answer.' +
+        (attempts.length ? " Your attempts: " + attempts.length + ", best score: " + best + "." : " Not attempted yet.") + "</p>";
+      const btn = document.createElement("button");
+      btn.className = "btn";
+      btn.textContent = "Start test";
+      btn.addEventListener("click", () => startTest(test));
+      card.appendChild(btn);
+      list.appendChild(card);
+    }
+  } catch (e) {
+    list.innerHTML = '<div class="card"><p class="msg err">Could not load tests: ' + esc(e.message) + "</p></div>";
+  }
+}
+
+/* ---------- test runner ---------- */
+let run = null;
+let timerId = null;
+async function startTest(test) {
+  try {
+    const q = await db("/questions?test_id=eq." + test.id + "&select=id,ord,subject,q,a,b,c,d&order=ord.asc");
+    const qs = q.data || [];
+    if (!qs.length) { alert("This test has no questions yet."); return; }
+    run = { test, qs, idx: 0, answers: {}, marked: {}, left: test.duration_min * 60, done: false };
+    $("testsView").classList.add("hidden");
+    $("resultView").classList.add("hidden");
+    $("runnerView").classList.remove("hidden");
+    $("runTitle").textContent = test.title;
+    $("runMeta").textContent = qs.length + " questions. +4 right, -1 wrong, 0 skipped.";
+    buildPalette();
+    showQuestion();
+    tickTimer();
+    clearInterval(timerId);
+    timerId = setInterval(() => {
+      run.left--;
+      tickTimer();
+      if (run.left <= 0) { clearInterval(timerId); submitAttempt(true); }
+    }, 1000);
+  } catch (e) {
+    alert("Could not start the test: " + e.message);
+  }
+}
+function tickTimer() {
+  if (!run) return;
+  const m = Math.floor(run.left / 60), s = run.left % 60;
+  $("runTimer").textContent = m + ":" + String(s).padStart(2, "0");
+}
+function buildPalette() {
+  const p = $("palette");
+  p.innerHTML = "";
+  run.qs.forEach((q, i) => {
+    const b = document.createElement("button");
+    b.textContent = i + 1;
+    b.addEventListener("click", () => { run.idx = i; showQuestion(); });
+    p.appendChild(b);
+  });
+  paintPalette();
+}
+function paintPalette() {
+  const btns = $("palette").children;
+  run.qs.forEach((q, i) => {
+    const has = run.answers[q.id] !== undefined;
+    const mk = !!run.marked[q.id];
+    btns[i].className = (has && mk) ? "ansmarked" : has ? "answered" : mk ? "marked" : "";
+    if (i === run.idx) btns[i].classList.add("current");
+  });
+}
+function showQuestion() {
+  const q = run.qs[run.idx];
+  $("qText").textContent = "Q" + (run.idx + 1) + ". " + q.q;
+  const box = $("qOpts");
+  box.innerHTML = "";
+  ["a", "b", "c", "d"].forEach((key, i) => {
+    const b = document.createElement("button");
+    b.className = "opt" + (run.answers[q.id] === i ? " sel" : "");
+    b.textContent = "ABCD"[i] + ". " + q[key];
+    b.addEventListener("click", () => { run.answers[q.id] = i; showQuestion(); paintPalette(); });
+    box.appendChild(b);
+  });
+  $("markBtn").textContent = run.marked[q.id] ? "Unmark review" : "Mark for review";
+  paintPalette();
+}
+$("prevBtn").addEventListener("click", () => { if (run && run.idx > 0) { run.idx--; showQuestion(); } });
+$("nextBtn").addEventListener("click", () => { if (run && run.idx < run.qs.length - 1) { run.idx++; showQuestion(); } });
+$("clearBtn").addEventListener("click", () => { if (run) { delete run.answers[run.qs[run.idx].id]; showQuestion(); } });
+$("markBtn").addEventListener("click", () => { if (run) { const id = run.qs[run.idx].id; run.marked[id] = !run.marked[id]; showQuestion(); } });
+$("submitBtn").addEventListener("click", () => {
+  if (!run) return;
+  const left = run.qs.filter(q => run.answers[q.id] === undefined).length;
+  if (confirm("Submit the test now?" + (left ? " " + left + " questions are still unanswered." : ""))) submitAttempt(false);
+});
+async function submitAttempt(auto) {
+  if (!run || run.done) return;
+  run.done = true;
+  clearInterval(timerId);
+  $("submitBtn").disabled = true;
+  try {
+    const q = await db("/questions?test_id=eq." + run.test.id + "&select=id,correct");
+    const key = {};
+    (q.data || []).forEach(x => { key[x.id] = x.correct; });
+    let correct = 0, wrong = 0, skipped = 0;
+    const answers = {};
+    run.qs.forEach(qq => {
+      const picked = run.answers[qq.id];
+      answers[qq.id] = picked === undefined ? null : picked;
+      if (picked === undefined) skipped++;
+      else if (picked === key[qq.id]) correct++;
+      else wrong++;
+    });
+    const score = correct * 4 - wrong;
+    const ins = await db("/attempts", {
+      method: "POST",
+      headers: { "Prefer": "return=representation" },
+      body: JSON.stringify({ user_id: me.id, test_id: run.test.id, score, correct, wrong, skipped, answers })
+    });
+    const attempt = ins.data[0];
+    $("runnerView").classList.add("hidden");
+    showResult(attempt.id, auto);
+  } catch (e) {
+    $("runMsg").textContent = "Submit failed: " + e.message;
+    $("runMsg").className = "msg err";
+    run.done = false;
+    $("submitBtn").disabled = false;
+  }
+}
+async function showResult(attemptId, auto) {
+  const box = $("resultView");
+  box.classList.remove("hidden");
+  box.innerHTML = '<div class="card"><p class="note">Loading result...</p></div>';
+  try {
+    const a = await db("/attempts?id=eq." + attemptId + "&select=*");
+    const attempt = (a.data || [])[0];
+    const qs = await db("/questions?test_id=eq." + attempt.test_id + "&select=*&order=ord.asc");
+    const test = testsCache.find(t => t.id === attempt.test_id) || { title: "Test" };
+    let html = '<div class="card"><h3>' + esc(test.title) + " - Result</h3>" +
+      (auto ? '<p class="note">Time finished, the test was submitted automatically.</p>' : "") +
+      '<div class="score">' + attempt.score + " / " + (qs.data.length * 4) + "</div>" +
+      '<p class="note">Right: ' + attempt.correct + " | Wrong: " + attempt.wrong + " | Skipped: " + attempt.skipped + " | " + esc(fmtDate(attempt.created_at)) + "</p></div>";
+    html += '<div class="card"><h3>Answer review</h3>';
+    (qs.data || []).forEach((q, i) => {
+      const picked = attempt.answers[q.id];
+      html += '<div style="margin-bottom:14px"><div class="qtext">Q' + (i + 1) + ". " + esc(q.q) + "</div>";
+      ["a", "b", "c", "d"].forEach((key, oi) => {
+        let cls = "opt";
+        if (oi === q.correct) cls += " right";
+        else if (picked === oi) cls += " wrong";
+        html += '<div class="' + cls + '">' + "ABCD"[oi] + ". " + esc(q[key]) + "</div>";
+      });
+      html += '<p class="note">' + (picked === null || picked === undefined ? "You skipped this question. " : "") + esc(q.explanation || "") + "</p></div>";
+    });
+    html += '<button class="btn" onclick="showView(\'tests\')">Back to tests</button></div>';
+    box.innerHTML = html;
+  } catch (e) {
+    box.innerHTML = '<div class="card"><p class="msg err">Could not load the result: ' + esc(e.message) + "</p></div>";
+  }
+}
+
+/* ---------- my records ---------- */
+async function loadMine() {
+  const body = $("mineBody");
+  body.innerHTML = '<tr><td colspan="7" class="note">Loading...</td></tr>';
+  try {
+    const a = await db("/attempts?user_id=eq." + me.id + "&select=*&order=created_at.desc");
+    const rows = a.data || [];
+    if (!rows.length) { body.innerHTML = '<tr><td colspan="7" class="note">No attempts yet.</td></tr>'; return; }
+    body.innerHTML = "";
+    rows.forEach(at => {
+      const test = testsCache.find(t => t.id === at.test_id);
+      const tr = document.createElement("tr");
+      tr.innerHTML = "<td>" + esc(fmtDate(at.created_at)) + "</td><td>" + esc(test ? test.title : "Test") + "</td><td>" + at.score + "</td><td>" + at.correct + "</td><td>" + at.wrong + "</td><td>" + at.skipped + "</td>";
+      const td = document.createElement("td");
+      const b = document.createElement("button");
+      b.className = "btn secondary";
+      b.style.marginTop = "0";
+      b.textContent = "Review";
+      b.addEventListener("click", () => {
+        $("mineView").classList.add("hidden");
+        $("testsView").classList.add("hidden");
+        showResult(at.id, false);
+      });
+      td.appendChild(b);
+      tr.appendChild(td);
+      body.appendChild(tr);
+    });
+  } catch (e) {
+    body.innerHTML = '<tr><td colspan="7" class="note">Could not load records: ' + esc(e.message) + "</td></tr>";
+  }
+}
+
+/* ---------- admin ---------- */
+let adminAttemptsCache = [];
+async function loadAdmin() {
+  if (me.role !== "admin") return;
+  const ub = $("adminUsers"), ab = $("adminAttempts");
+  ub.innerHTML = '<tr><td colspan="6" class="note">Loading...</td></tr>';
+  ab.innerHTML = '<tr><td colspan="7" class="note">Loading...</td></tr>';
+  try {
+    const u = await db("/users?select=id,username,name,gmail,role,created_at&order=created_at.asc");
+    const a = await db("/attempts?select=*&order=created_at.desc");
+    const users = u.data || [];
+    adminAttemptsCache = a.data || [];
+    const nameOf = {};
+    users.forEach(x => { nameOf[x.id] = x.username; });
+    ub.innerHTML = "";
+    users.forEach(x => {
+      const mine = adminAttemptsCache.filter(at => at.user_id === x.id);
+      const best = mine.length ? Math.max.apply(null, mine.map(at => at.score)) : "-";
+      const tr = document.createElement("tr");
+      tr.innerHTML = "<td>" + esc(x.username) + "</td><td>" + esc(x.name || "") + "</td><td>" + esc(x.gmail) + "</td><td>" + esc(x.role) + "</td><td>" + mine.length + "</td><td>" + best + "</td>";
+      ub.appendChild(tr);
+    });
+    ab.innerHTML = "";
+    adminAttemptsCache.forEach(at => {
+      const test = testsCache.find(t => t.id === at.test_id);
+      const tr = document.createElement("tr");
+      tr.innerHTML = "<td>" + esc(fmtDate(at.created_at)) + "</td><td>" + esc(nameOf[at.user_id] || "") + "</td><td>" + esc(test ? test.title : "Test") + "</td><td>" + at.score + "</td><td>" + at.correct + "</td><td>" + at.wrong + "</td><td>" + at.skipped + "</td>";
+      ab.appendChild(tr);
+    });
+    if (!users.length) ub.innerHTML = '<tr><td colspan="6" class="note">No students yet.</td></tr>';
+    if (!adminAttemptsCache.length) ab.innerHTML = '<tr><td colspan="7" class="note">No attempts yet.</td></tr>';
+  } catch (e) {
+    ub.innerHTML = '<tr><td colspan="6" class="note">Could not load: ' + esc(e.message) + "</td></tr>";
+  }
+}
+$("csvBtn").addEventListener("click", async () => {
+  try {
+    const u = await db("/users?select=id,username");
+    const nameOf = {};
+    (u.data || []).forEach(x => { nameOf[x.id] = x.username; });
+    let csv = "date,student,test,score,right,wrong,skipped\n";
+    adminAttemptsCache.forEach(at => {
+      const test = testsCache.find(t => t.id === at.test_id);
+      const row = [new Date(at.created_at).toISOString(), nameOf[at.user_id] || "", test ? test.title : "Test", at.score, at.correct, at.wrong, at.skipped];
+      csv += row.map(v => '"' + String(v).replace(/"/g, '""') + '"').join(",") + "\n";
+    });
+    const blob = new Blob([csv], { type: "text/csv" });
+    const a = document.createElement("a");
+    a.href = URL.createObjectURL(blob);
+    a.download = "neet-test-results.csv";
+    a.click();
+    URL.revokeObjectURL(a.href);
+  } catch (e) {
+    alert("Download failed: " + e.message);
+  }
+});
+
+/* ---------- seed demo test ---------- */
+const DEMO_QUESTIONS = [
+  ["Physics", "The SI unit of force is:", "Joule", "Newton", "Watt", "Pascal", 1, "Force is measured in newtons (N)."],
+  ["Physics", "A body starts from rest and moves with acceleration 2 m/s2 for 5 seconds. Its final velocity is:", "5 m/s", "7 m/s", "10 m/s", "20 m/s", 2, "v = u + at = 0 + 2 x 5 = 10 m/s."],
+  ["Physics", "The kinetic energy of a 2 kg body moving at 3 m/s is:", "3 J", "6 J", "9 J", "18 J", 2, "KE = 1/2 mv2 = 1/2 x 2 x 9 = 9 J."],
+  ["Physics", "A current of 2 A flows through a 5 ohm resistor. The voltage across it is:", "2.5 V", "7 V", "10 V", "25 V", 2, "V = IR = 2 x 5 = 10 V."],
+  ["Physics", "The power of a lens of focal length 50 cm is:", "+0.5 D", "+2 D", "+5 D", "+50 D", 1, "P = 1/f in metres = 1/0.5 = +2 D."],
+  ["Physics", "The acceleration due to gravity on Earth is about:", "1.6 m/s2", "3.7 m/s2", "9.8 m/s2", "12.5 m/s2", 2, "g is about 9.8 m/s2 on Earth's surface."],
+  ["Physics", "Which of these is a vector quantity?", "Distance", "Speed", "Mass", "Displacement", 3, "Displacement has both magnitude and direction."],
+  ["Physics", "Work done when a force of 10 N moves a body by 5 m in its own direction is:", "2 J", "15 J", "50 J", "100 J", 2, "W = F x s = 10 x 5 = 50 J."],
+  ["Physics", "The SI unit of frequency is:", "Second", "Hertz", "Metre", "Ampere", 1, "Frequency is measured in hertz (Hz)."],
+  ["Physics", "The image formed by a plane mirror is:", "Real and inverted", "Virtual and erect", "Real and erect", "Virtual and inverted", 1, "A plane mirror forms a virtual, erect image of the same size."],
+  ["Chemistry", "The atomic number of carbon is:", "4", "6", "8", "12", 1, "Carbon has 6 protons, so its atomic number is 6."],
+  ["Chemistry", "The pH of a neutral solution at 25 C is:", "0", "1", "7", "14", 2, "A neutral solution has pH 7 at 25 C."],
+  ["Chemistry", "The chemical formula of washing soda is:", "NaHCO3", "Na2CO3.10H2O", "NaOH", "NaCl", 1, "Washing soda is sodium carbonate decahydrate, Na2CO3.10H2O."],
+  ["Chemistry", "The most abundant gas in the Earth's atmosphere is:", "Oxygen", "Carbon dioxide", "Nitrogen", "Argon", 2, "Nitrogen makes up about 78 percent of the atmosphere."],
+  ["Chemistry", "Avogadro's number is approximately:", "3.011 x 10^23", "6.022 x 10^23", "1.602 x 10^-19", "9.109 x 10^-31", 1, "One mole contains 6.022 x 10^23 particles."],
+  ["Chemistry", "Oxidation is the:", "Gain of electrons", "Loss of electrons", "Gain of protons", "Loss of neutrons", 1, "Oxidation is loss of electrons; reduction is gain."],
+  ["Chemistry", "The common name of Ca(OH)2 is:", "Quick lime", "Slaked lime", "Limestone", "Chalk", 1, "Calcium hydroxide is called slaked lime."],
+  ["Chemistry", "Which of the following is an acid?", "NaOH", "NaCl", "HCl", "KOH", 2, "Hydrochloric acid, HCl, is an acid; NaOH and KOH are bases."],
+  ["Chemistry", "The molar mass of water (H2O) is:", "16 g/mol", "17 g/mol", "18 g/mol", "20 g/mol", 2, "2 x 1 + 16 = 18 g/mol."],
+  ["Chemistry", "Rusting of iron produces:", "Fe2O3.xH2O", "FeO", "Fe3O4", "Fe(OH)3 only", 0, "Rust is hydrated ferric oxide, Fe2O3.xH2O."],
+  ["Biology", "Which organelle is called the powerhouse of the cell?", "Nucleus", "Ribosome", "Mitochondria", "Golgi body", 2, "Mitochondria produce ATP, the energy currency of the cell."],
+  ["Biology", "Photosynthesis in a plant cell takes place in the:", "Mitochondria", "Chloroplast", "Nucleus", "Vacuole", 1, "Chloroplasts contain chlorophyll and carry out photosynthesis."],
+  ["Biology", "The double helix model of DNA was proposed by:", "Darwin and Wallace", "Watson and Crick", "Hershey and Chase", "Griffith and Avery", 1, "Watson and Crick proposed the DNA double helix in 1953."],
+  ["Biology", "The number of chromosomes in a normal human cell is:", "23", "44", "46", "48", 2, "Humans have 23 pairs, that is 46 chromosomes."],
+  ["Biology", "The universal blood donor group is:", "AB positive", "O negative", "A negative", "B positive", 1, "O negative blood can be given to people of any group."],
+  ["Biology", "Insulin is secreted by which cells of the pancreas?", "Alpha cells", "Beta cells", "Delta cells", "Acinar cells", 1, "Beta cells of the islets of Langerhans secrete insulin."],
+  ["Biology", "The structural and functional unit of the kidney is the:", "Neuron", "Nephron", "Alveolus", "Glomerulus", 1, "Each kidney has about a million nephrons that filter blood."],
+  ["Biology", "Which vitamin is synthesised in the human skin with sunlight?", "Vitamin A", "Vitamin C", "Vitamin D", "Vitamin K", 2, "Sunlight helps the skin make vitamin D."],
+  ["Biology", "In plants, water and minerals are transported upward by the:", "Phloem", "Xylem", "Cambium", "Cortex", 1, "Xylem vessels carry water and minerals from roots to leaves."],
+  ["Biology", "The average lifespan of a human red blood cell is about:", "10 days", "40 days", "120 days", "One year", 2, "RBCs live for about 120 days before being broken down in the spleen."]
+];
+$("seedBtn").addEventListener("click", async () => {
+  $("seedBtn").disabled = true;
+  $("seedMsg").textContent = "Loading questions...";
+  $("seedMsg").className = "msg";
+  try {
+    const t = await db("/tests", {
+      method: "POST",
+      headers: { "Prefer": "return=representation" },
+      body: JSON.stringify({ title: "NEET Demo Test 1", duration_min: 45 })
+    });
+    const test = t.data[0];
+    const rows = DEMO_QUESTIONS.map((q, i) => ({
+      test_id: test.id, ord: i + 1, subject: q[0], q: q[1], a: q[2], b: q[3], c: q[4], d: q[5], correct: q[6], explanation: q[7]
+    }));
+    await db("/questions", { method: "POST", body: JSON.stringify(rows) });
+    $("seedMsg").textContent = "Demo test loaded with " + rows.length + " questions.";
+    $("seedMsg").className = "msg ok";
+    loadTests();
+  } catch (e) {
+    $("seedMsg").textContent = "Load failed: " + e.message;
+    $("seedMsg").className = "msg err";
+  }
+  $("seedBtn").disabled = false;
+});
+
+/* ---------- boot ---------- */
+renderShell();
+</script>
+</body>
+</html>
