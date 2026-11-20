@@ -773,6 +773,7 @@ function analysisHtml(questions, attempt) {
 
 /* ---------- review filters: proper analysis while reviewing ---------- */
 let revF = "all", revS = "all";
+let resultFrom = "tests";
 function reviewFilter(kind, val) {
   if (kind === "res") revF = val; else revS = val;
   let visible = 0;
@@ -791,6 +792,7 @@ function reviewFilter(kind, val) {
 }
 
 async function showResult(attemptId, auto) {
+  if (auto) resultFrom = "tests";
   const box = $("resultView");
   box.classList.remove("hidden");
   box.innerHTML = '<div class="card"><p class="note">Loading result...</p></div>';
@@ -799,7 +801,8 @@ async function showResult(attemptId, auto) {
     const attempt = (a.data || [])[0];
     const qs = await db("/questions?test_id=eq." + attempt.test_id + "&select=*&order=ord.asc");
     const test = testsCache.find(t => t.id === attempt.test_id) || { title: "Test" };
-    let html = '<div class="card"><h3>' + esc(test.title) + " - Result</h3>" +
+    let html = '<p style="margin:0 0 10px"><button class="btn secondary" onclick="showView(resultFrom)">&larr; Back</button></p>' +
+      '<div class="card"><h3>' + esc(test.title) + " - Result</h3>" +
       (auto ? '<p class="note">Time finished, the test was submitted automatically.</p>' : "") +
       '<div class="score">' + attempt.score + " / " + (qs.data.length * 4) + "</div>" +
       '<p class="note">Right: ' + attempt.correct + " | Wrong: " + attempt.wrong + " | Skipped: " + attempt.skipped + " | " + esc(fmtDate(attempt.created_at)) + "</p></div>";
@@ -831,7 +834,7 @@ async function showResult(attemptId, auto) {
       });
       html += '<p class="note">' + (picked === null || picked === undefined ? "You skipped this question. " : "") + withImg(q.explanation || "") + "</p></div>";
     });
-    html += '<button class="btn" onclick="showView(\'tests\')">Back to tests</button></div>';
+    html += '<button class="btn" onclick="showView(resultFrom)">&larr; Back</button></div>';
     box.innerHTML = html;
     revF = "all"; revS = "all"; reviewFilter("res", "all");
   } catch (e) {
@@ -873,8 +876,7 @@ async function loadMine() {
       b.style.marginTop = "0";
       b.textContent = "Review";
       b.addEventListener("click", () => {
-        $("mineView").classList.add("hidden");
-        $("testsView").classList.add("hidden");
+        resultFrom = "mine";
         showResult(at.id, false);
       });
       td.appendChild(b);
