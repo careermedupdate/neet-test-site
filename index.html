@@ -126,6 +126,7 @@
   <section id="appView" class="hidden">
     <nav class="main">
       <button id="navTests" class="active">Tests</button>
+      <button id="navRevision">Revision</button>
       <button id="navMine">My records</button>
       <button id="navProfile">Profile</button>
       <button id="navBoard">Leaderboard</button>
@@ -140,6 +141,20 @@
         <p class="note">Admin: load the starter demo paper (30 questions) into the database.</p>
         <button class="btn" id="seedBtn">Load demo test</button>
         <div class="msg" id="seedMsg"></div>
+      </div>
+    </div>
+
+    <div id="revisionView" class="hidden">
+      <div class="card">
+        <h3>Mistake book</h3>
+        <p class="note">Practise the questions you got wrong in past tests. Up to 60 of your most recent mistakes are collected into one practice test.</p>
+        <button class="btn" id="revMistakesBtn">Practise my mistakes</button>
+      </div>
+      <div class="card">
+        <h3>Bookmarks</h3>
+        <p class="note" id="revBmText">Loading...</p>
+        <button class="btn" id="revBmBtn">Practise bookmarks</button>
+        <button class="btn secondary" id="revBmClear">Clear bookmarks</button>
       </div>
     </div>
 
@@ -401,11 +416,13 @@ $("forgotBtn").addEventListener("click", async () => {
 /* ---------- main views ---------- */
 function showView(v) {
   $("navTests").classList.toggle("active", v === "tests");
+  $("navRevision").classList.toggle("active", v === "revision");
   $("navMine").classList.toggle("active", v === "mine");
   $("navProfile").classList.toggle("active", v === "profile");
   $("navBoard").classList.toggle("active", v === "board");
   $("navAdmin").classList.toggle("active", v === "admin");
   $("testsView").classList.toggle("hidden", v !== "tests");
+  $("revisionView").classList.toggle("hidden", v !== "revision");
   $("mineView").classList.toggle("hidden", v !== "mine");
   $("profileView").classList.toggle("hidden", v !== "profile");
   $("boardView").classList.toggle("hidden", v !== "board");
@@ -414,12 +431,14 @@ function showView(v) {
   $("resultView").classList.add("hidden");
   window.scrollTo(0, 0);
   if (v === "tests") loadTests();
+  if (v === "revision") renderRevision();
   if (v === "mine") loadMine();
   if (v === "profile") renderProfile();
   if (v === "board") loadBoard();
   if (v === "admin") loadAdmin();
 }
 $("navTests").addEventListener("click", () => showView("tests"));
+$("navRevision").addEventListener("click", () => showView("revision"));
 $("navMine").addEventListener("click", () => showView("mine"));
 $("navProfile").addEventListener("click", () => showView("profile"));
 $("navBoard").addEventListener("click", () => showView("board"));
@@ -896,36 +915,6 @@ function renderExtraCards(list) {
   mb.addEventListener("click", () => buildMock(mb));
   mc.appendChild(mb);
   list.appendChild(mc);
-  const rc = document.createElement("div");
-  rc.className = "card";
-  const bms = getBookmarks();
-  rc.innerHTML = "<h3>Revision</h3>" +
-    '<p class="note">Practise the questions you got wrong in past tests, or the questions you bookmarked (' + bms.length + " bookmarked).</p>";
-  const eb = document.createElement("button");
-  eb.className = "btn";
-  eb.textContent = "Practise my mistakes";
-  eb.addEventListener("click", () => buildMistakes(eb));
-  const bb = document.createElement("button");
-  bb.className = "btn secondary";
-  bb.textContent = "Practise bookmarks";
-  bb.addEventListener("click", () => buildBookmarksPractice(bb));
-  rc.appendChild(eb);
-  rc.appendChild(document.createTextNode(" "));
-  rc.appendChild(bb);
-  if (bms.length) {
-    const cb = document.createElement("button");
-    cb.className = "btn secondary";
-    cb.textContent = "Clear bookmarks";
-    cb.addEventListener("click", () => {
-      if (confirm("Clear all your bookmarks?")) {
-        try { localStorage.removeItem(bmKey()); } catch (e) {}
-        loadTests();
-      }
-    });
-    rc.appendChild(document.createTextNode(" "));
-    rc.appendChild(cb);
-  }
-  list.appendChild(rc);
   const cc = document.createElement("div");
   cc.className = "card";
   cc.innerHTML = "<h3>Build your own practice test</h3>" +
@@ -995,6 +984,11 @@ async function startTest(test, saved) {
     run = { test, qs, idx: saved ? (saved.idx || 0) : 0, answers: saved ? (saved.answers || {}) : {}, marked: saved ? (saved.marked || {}) : {}, times: saved ? (saved.times || {}) : {}, left: saved ? saved.left : test.duration_min * 60, done: false, curQ: null, curSince: 0 };
     $("submitBtn").disabled = false;
     $("testsView").classList.add("hidden");
+    $("revisionView").classList.add("hidden");
+    $("mineView").classList.add("hidden");
+    $("profileView").classList.add("hidden");
+    $("boardView").classList.add("hidden");
+    $("adminView").classList.add("hidden");
     $("resultView").classList.add("hidden");
     $("runnerView").classList.remove("hidden");
     $("runTitle").textContent = test.title;
@@ -1583,6 +1577,23 @@ $("seedBtn").addEventListener("click", async () => {
     $("seedMsg").className = "msg err";
   }
   $("seedBtn").disabled = false;
+});
+
+/* ---------- revision view ---------- */
+function renderRevision() {
+  const bms = getBookmarks();
+  $("revBmText").textContent = bms.length
+    ? "You have " + bms.length + " bookmarked question" + (bms.length === 1 ? "" : "s") + ". Practise up to 30 of them at a time."
+    : "No bookmarks yet. Bookmark questions during a test or from the answer review, and they will collect here.";
+  $("revBmClear").style.display = bms.length ? "" : "none";
+}
+$("revMistakesBtn").addEventListener("click", () => { resultFrom = "revision"; buildMistakes($("revMistakesBtn")); });
+$("revBmBtn").addEventListener("click", () => { resultFrom = "revision"; buildBookmarksPractice($("revBmBtn")); });
+$("revBmClear").addEventListener("click", () => {
+  if (confirm("Clear all your bookmarks?")) {
+    try { localStorage.removeItem(bmKey()); } catch (e) {}
+    renderRevision();
+  }
 });
 
 /* ---------- search ---------- */
