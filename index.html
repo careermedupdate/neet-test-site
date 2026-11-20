@@ -50,13 +50,33 @@
   .score { font-size: 30px; font-weight: 800; }
   .hidden { display: none; }
   .tablewrap { overflow-x: auto; }
+  :root { --card: #fff; }
+  select { width: 100%; padding: 10px; border: 1px solid #c3ccd9; border-radius: 8px; font-size: 15px; background: #fff; color: #1a2332; }
+  .chaplist { max-height: 220px; overflow-y: auto; border: 1px solid #dde3ee; border-radius: 8px; padding: 8px; }
+  .chaplist label { display: block; font-weight: 400; font-size: 14px; margin: 4px 0; }
+  .lg { display: inline-block; width: 12px; height: 12px; border-radius: 3px; margin: 0 4px 0 10px; vertical-align: -1px; }
+  html[data-theme="dark"] { --card: #1e293b; }
+  html[data-theme="dark"] body { background: #0f172a; color: #e2e8f0; }
+  html[data-theme="dark"] .card { background: #1e293b; border-color: #334155; }
+  html[data-theme="dark"] .opt, html[data-theme="dark"] .palette button, html[data-theme="dark"] nav.main button, html[data-theme="dark"] .tabs button { background: #1e293b; color: #e2e8f0; border-color: #475569; }
+  html[data-theme="dark"] .opt.sel { background: #1e3a8a; border-color: #3b82f6; }
+  html[data-theme="dark"] .opt.right { background: #14532d; border-color: #16a34a; }
+  html[data-theme="dark"] .opt.wrong { background: #7f1d1d; border-color: #dc2626; }
+  html[data-theme="dark"] input, html[data-theme="dark"] select { background: #0f172a; color: #e2e8f0; border-color: #475569; }
+  html[data-theme="dark"] .btn.secondary { background: #334155; color: #e2e8f0; }
+  html[data-theme="dark"] th, html[data-theme="dark"] td { border-bottom-color: #334155; }
+  html[data-theme="dark"] th { color: #94a3b8; }
+  html[data-theme="dark"] .note { color: #94a3b8; }
+  html[data-theme="dark"] .chaplist { border-color: #334155; }
 </style>
+<script>try { document.documentElement.setAttribute("data-theme", localStorage.getItem("neet-theme") || "light"); } catch (e) {}</script>
 </head>
 <body>
 <header>
   <div class="brand">NEET MCQ Test Site</div>
   <div class="row">
     <span class="who" id="who"></span>
+    <button id="themeBtn">Dark mode</button>
     <button id="logoutBtn" class="hidden">Log out</button>
   </div>
 </header>
@@ -113,6 +133,7 @@
     </nav>
 
     <div id="testsView">
+      <div class="card"><h3>Search tests</h3><input id="testSearch" placeholder="Type a chapter, subject or module name"></div>
       <div id="testList"></div>
       <div class="card hidden" id="seedCard">
         <h3>No test found</h3>
@@ -130,15 +151,19 @@
         </div>
         <div class="note" id="runMeta"></div>
         <div class="palette" id="palette"></div>
+        <div class="note"><span class="lg" style="background:#15803d"></span>Answered<span class="lg" style="background:#7c3aed"></span>Marked for review<span class="lg" style="background:#fff;border:1px solid #c3ccd9"></span>Not answered<span class="lg" style="background:#fff;border:2px solid #1d4ed8"></span>Current question</div>
+        <div class="note" id="palCounts"></div>
         <div class="qtext" id="qText"></div>
         <div id="qOpts"></div>
         <div class="row">
           <button class="btn secondary" id="prevBtn">Previous</button>
           <button class="btn secondary" id="markBtn">Mark for review</button>
+          <button class="btn secondary" id="bmBtn">Bookmark</button>
           <button class="btn secondary" id="clearBtn">Clear answer</button>
           <button class="btn secondary" id="nextBtn">Next</button>
         </div>
         <button class="btn danger" id="submitBtn">Submit test</button>
+        <button class="btn secondary" id="pauseBtn">Pause and finish later</button>
         <div class="msg" id="runMsg"></div>
       </div>
     </div>
@@ -156,6 +181,14 @@
           <thead><tr><th>Date</th><th>Test</th><th>Score</th><th>Right</th><th>Wrong</th><th>Skipped</th><th></th></tr></thead>
           <tbody id="mineBody"></tbody>
         </table></div>
+      </div>
+      <div class="card">
+        <h3>My progress</h3>
+        <div id="mineGraph"><p class="note">Loading...</p></div>
+      </div>
+      <div class="card">
+        <h3>Weak chapters</h3>
+        <div id="weakChaps"><p class="note">Loading...</p></div>
       </div>
     </div>
 
@@ -454,10 +487,11 @@ function isDailyTest(t) { return t.title.indexOf("Daily Test - ") === 0; }
 async function loadTests() {
   const list = $("testList");
   list.innerHTML = '<div class="card"><p class="note">Loading tests...</p></div>';
+  $("testSearch").value = "";
   try {
     const t = await db("/tests?select=id,title,duration_min&order=created_at.asc");
     testsCache = t.data || [];
-    const a = await db("/attempts?user_id=eq." + me.id + "&select=id,test_id,score");
+    const a = await db("/attempts?user_id=eq." + me.id + "&select=id,test_id,score,created_at");
     const mine = a.data || [];
     myAttempts = mine;
     if (!testsCache.length) {
@@ -481,13 +515,21 @@ async function loadTests() {
     dBtn.className = "btn";
     dBtn.textContent = "Start today's test";
     dBtn.addEventListener("click", () => startDailyTest());
+    const streak = dailyStreak(mine);
+    if (streak > 0) {
+      const sp = document.createElement("p");
+      sp.className = "note";
+      sp.textContent = "Your daily test streak: " + streak + (streak === 1 ? " day" : " days") + " in a row.";
+      dCard.appendChild(sp);
+    }
     dCard.appendChild(dBtn);
     list.appendChild(dCard);
+    renderExtraCards(list);
     /* Institutes first: one card per institute, chapters open inside it */
     const insts = {};
     const instOrder = [];
     for (const test of testsCache) {
-      if (isDailyTest(test)) continue;
+      if (isDailyTest(test) || isGenerated(test)) continue;
       const p = parseTitle(test.title);
       if (!insts[p.inst]) { insts[p.inst] = []; instOrder.push(p.inst); }
       insts[p.inst].push(test);
@@ -539,7 +581,7 @@ function renderInstitute(inst) {
   const groups = {};
   const order = [];
   for (const test of testsCache) {
-    if (isDailyTest(test)) continue;
+    if (isDailyTest(test) || isGenerated(test)) continue;
     const p = parseTitle(test.title);
     if (p.inst !== inst) continue;
     if (!groups[p.subj]) { groups[p.subj] = []; order.push(p.subj); }
@@ -579,7 +621,7 @@ async function startDailyTest() {
     const ex = await db("/tests?title=eq." + encodeURIComponent(title) + "&select=id,title,duration_min");
     if (ex.data && ex.data.length) { startTest(ex.data[0]); return; }
     const all = await db("/tests?select=id,title");
-    const dailyIds = (all.data || []).filter(isDailyTest).map(t => t.id);
+    const dailyIds = (all.data || []).filter(t => isDailyTest(t) || isGenerated(t)).map(t => t.id);
     let poolPath = "/questions?select=id";
     if (dailyIds.length) poolPath += "&test_id=not.in.(" + dailyIds.join(",") + ")";
     const poolRes = await db(poolPath);
@@ -615,15 +657,342 @@ async function startDailyTest() {
   }
 }
 
+/* ---------- generated tests: full mock and practice ---------- */
+function isGenerated(t) { return t.title.indexOf("Practice:") === 0 || t.title.indexOf("Full Mock Test - ") === 0; }
+function shuffleArr(a) { for (let i = a.length - 1; i > 0; i--) { const j = Math.floor(Math.random() * (i + 1)); const t = a[i]; a[i] = a[j]; a[j] = t; } return a; }
+function normSubj(s) { const x = (s || "").toLowerCase(); if (x.indexOf("phys") === 0) return "Physics"; if (x.indexOf("chem") === 0) return "Chemistry"; return "Biology"; }
+async function fetchFullByIds(ids) {
+  const out = [];
+  for (let i = 0; i < ids.length; i += 40) {
+    const chunk = ids.slice(i, i + 40);
+    const r = await db("/questions?id=in.(" + chunk.join(",") + ")&select=subject,q,a,b,c,d,correct,explanation");
+    const byId = {};
+    (r.data || []).forEach(x => { byId[x.id] = x; });
+    chunk.forEach(id => { if (byId[id]) out.push(byId[id]); });
+  }
+  return out;
+}
+async function createGeneratedTest(title, durationMin, fullRows) {
+  const t = await db("/tests", {
+    method: "POST",
+    headers: { "Prefer": "return=representation" },
+    body: JSON.stringify({ title: title, duration_min: durationMin })
+  });
+  const test = t.data[0];
+  const rows = fullRows.map((q, i) => ({
+    test_id: test.id, ord: i + 1, subject: q.subject, q: q.q, a: q.a, b: q.b, c: q.c, d: q.d, correct: q.correct, explanation: q.explanation
+  }));
+  for (let i = 0; i < rows.length; i += 100) {
+    await db("/questions", { method: "POST", body: JSON.stringify(rows.slice(i, i + 100)) });
+  }
+  testsCache.push(test);
+  return test;
+}
+async function buildMock(btn) {
+  const title = "Full Mock Test - " + todayStr();
+  const ex = testsCache.find(t => t.title === title);
+  if (ex) { startTest(ex); return; }
+  btn.disabled = true;
+  btn.textContent = "Preparing your mock...";
+  try {
+    const allt = await db("/tests?select=id,title");
+    const badIds = {};
+    (allt.data || []).forEach(t => { if (isDailyTest(t) || isGenerated(t)) badIds[t.id] = 1; });
+    let meta = [], offset = 0;
+    while (true) {
+      const r = await db("/questions?select=id,subject,test_id&limit=1000&offset=" + offset);
+      const rows = r.data || [];
+      meta = meta.concat(rows);
+      if (rows.length < 1000) break;
+      offset += 1000;
+    }
+    const groups = { Physics: [], Chemistry: [], Biology: [] };
+    meta.forEach(m => { if (!badIds[m.test_id]) groups[normSubj(m.subject)].push(m.id); });
+    const pick = [];
+    [["Physics", 45], ["Chemistry", 45], ["Biology", 90]].forEach(pair => {
+      shuffleArr(groups[pair[0]]);
+      pick.push.apply(pick, groups[pair[0]].slice(0, pair[1]));
+    });
+    if (pick.length < 30) {
+      alert("Not enough questions in the bank for a mock test yet.");
+      btn.disabled = false;
+      btn.textContent = "Start full mock";
+      return;
+    }
+    const full = await fetchFullByIds(pick);
+    const bySubj = { Physics: [], Chemistry: [], Biology: [] };
+    full.forEach(q => bySubj[normSubj(q.subject)].push(q));
+    const ordered = bySubj.Physics.concat(bySubj.Chemistry, bySubj.Biology);
+    const test = await createGeneratedTest(title, 180, ordered);
+    startTest(test);
+  } catch (e) {
+    alert("Could not build the mock test: " + e.message);
+  }
+  btn.disabled = false;
+  btn.textContent = "Start full mock";
+}
+async function buildMistakes(btn) {
+  btn.disabled = true;
+  btn.textContent = "Collecting your mistakes...";
+  try {
+    const a = await db("/attempts?user_id=eq." + me.id + "&select=answers,created_at&order=created_at.desc");
+    const cand = [];
+    const seenQ = {};
+    (a.data || []).forEach(at => {
+      Object.keys(at.answers || {}).forEach(qid => {
+        if (qid === "__times") return;
+        const p = at.answers[qid];
+        if (p !== null && p !== undefined && !seenQ[qid]) { seenQ[qid] = 1; cand.push({ id: qid, picked: p }); }
+      });
+    });
+    if (!cand.length) {
+      alert("No attempted questions found yet. Take some tests first.");
+      btn.disabled = false;
+      btn.textContent = "Practise my mistakes";
+      return;
+    }
+    const wrongIds = [];
+    for (let i = 0; i < cand.length; i += 100) {
+      const chunk = cand.slice(i, i + 100);
+      const r = await db("/questions?id=in.(" + chunk.map(c => c.id).join(",") + ")&select=id,correct");
+      const byId = {};
+      (r.data || []).forEach(x => { byId[x.id] = x; });
+      chunk.forEach(c => { const q = byId[c.id]; if (q && q.correct !== c.picked) wrongIds.push(c.id); });
+      if (wrongIds.length >= 60) break;
+    }
+    if (!wrongIds.length) {
+      alert("No wrong answers found. Your mistake book is empty, well done.");
+      btn.disabled = false;
+      btn.textContent = "Practise my mistakes";
+      return;
+    }
+    const full = await fetchFullByIds(wrongIds.slice(0, 60));
+    const seenText = {};
+    const uniq = [];
+    full.forEach(q => { if (!seenText[q.q]) { seenText[q.q] = 1; uniq.push(q); } });
+    const test = await createGeneratedTest("Practice: Mistake Book - " + todayStr(), Math.max(15, Math.round(uniq.length * 1.5)), uniq);
+    startTest(test);
+  } catch (e) {
+    alert("Could not build the mistake practice: " + e.message);
+  }
+  btn.disabled = false;
+  btn.textContent = "Practise my mistakes";
+}
+
+/* ---------- bookmarks ---------- */
+function bmKey() { return "neet-bookmarks-" + me.id; }
+function getBookmarks() { try { return JSON.parse(localStorage.getItem(bmKey()) || "[]"); } catch (e) { return []; } }
+function isBookmarked(id) { return getBookmarks().indexOf(id) >= 0; }
+function toggleBookmark(id, el) {
+  let b = getBookmarks();
+  if (b.indexOf(id) >= 0) b = b.filter(x => x !== id);
+  else { b.unshift(id); b = b.slice(0, 500); }
+  try { localStorage.setItem(bmKey(), JSON.stringify(b)); } catch (e) {}
+  if (el) el.textContent = isBookmarked(id) ? "★ Bookmarked" : "☆ Bookmark";
+}
+async function buildBookmarksPractice(btn) {
+  const b = getBookmarks();
+  if (!b.length) { alert("No bookmarks yet. Bookmark questions during a test or from the answer review."); return; }
+  btn.disabled = true;
+  btn.textContent = "Preparing...";
+  try {
+    const full = await fetchFullByIds(b.slice(0, 30));
+    if (!full.length) {
+      alert("Those bookmarked questions are no longer available.");
+      btn.disabled = false;
+      btn.textContent = "Practise bookmarks";
+      return;
+    }
+    const test = await createGeneratedTest("Practice: Bookmarks - " + todayStr(), Math.max(15, Math.round(full.length * 1.5)), full);
+    startTest(test);
+  } catch (e) {
+    alert("Could not build the bookmark practice: " + e.message);
+  }
+  btn.disabled = false;
+  btn.textContent = "Practise bookmarks";
+}
+
+/* ---------- custom practice ---------- */
+async function buildCustom(btn) {
+  const checked = Array.from(document.querySelectorAll("#chapList input[type=checkbox]:checked")).map(x => x.value);
+  if (!checked.length) { alert("Tick at least one chapter."); return; }
+  const n = parseInt($("custCount").value, 10) || 30;
+  btn.disabled = true;
+  btn.textContent = "Building your test...";
+  try {
+    let pool = [];
+    for (const tid of checked) {
+      const r = await db("/questions?test_id=eq." + tid + "&select=subject,q,a,b,c,d,correct,explanation");
+      pool = pool.concat(r.data || []);
+    }
+    const seenText = {};
+    pool = pool.filter(q => { if (seenText[q.q]) return false; seenText[q.q] = 1; return true; });
+    shuffleArr(pool);
+    const pick = pool.slice(0, Math.min(n, pool.length));
+    const test = await createGeneratedTest("Practice: Custom - " + todayStr(), Math.max(10, Math.round(pick.length * 1.5)), pick);
+    startTest(test);
+  } catch (e) {
+    alert("Could not build the practice test: " + e.message);
+  }
+  btn.disabled = false;
+  btn.textContent = "Build practice test";
+}
+
+/* ---------- daily streak ---------- */
+function dayKey(d) {
+  return d.getFullYear() + "-" + String(d.getMonth() + 1).padStart(2, "0") + "-" + String(d.getDate()).padStart(2, "0");
+}
+function dailyStreak(attempts) {
+  const dailyIds = {};
+  testsCache.forEach(t => { if (isDailyTest(t)) dailyIds[t.id] = 1; });
+  const days = {};
+  (attempts || []).forEach(at => {
+    if (!dailyIds[at.test_id] || !at.created_at) return;
+    days[dayKey(new Date(at.created_at))] = 1;
+  });
+  let streak = 0;
+  const cur = new Date();
+  if (!days[dayKey(cur)]) cur.setDate(cur.getDate() - 1);
+  while (days[dayKey(cur)]) {
+    streak++;
+    cur.setDate(cur.getDate() - 1);
+  }
+  return streak;
+}
+
+/* ---------- extra cards on the tests page ---------- */
+function renderExtraCards(list) {
+  const sv = getAnySavedRun();
+  if (sv) {
+    const t = testsCache.find(x => x.id === sv.testId);
+    if (t) {
+      const card = document.createElement("div");
+      card.className = "card";
+      const answered = Object.keys(sv.answers || {}).length;
+      card.innerHTML = "<h3>Paused test</h3>" +
+        '<p class="note">You paused "' + esc(t.title) + '" with ' + Math.floor(sv.left / 60) + ":" + String(sv.left % 60).padStart(2, "0") + " left and " + answered + " questions answered.</p>";
+      const rb = document.createElement("button");
+      rb.className = "btn";
+      rb.textContent = "Resume test";
+      rb.addEventListener("click", () => startTest(t, sv));
+      const db2 = document.createElement("button");
+      db2.className = "btn secondary";
+      db2.textContent = "Discard";
+      db2.addEventListener("click", () => { clearSavedRun(); loadTests(); });
+      card.appendChild(rb);
+      card.appendChild(document.createTextNode(" "));
+      card.appendChild(db2);
+      list.appendChild(card);
+    }
+  }
+  const mc = document.createElement("div");
+  mc.className = "card";
+  mc.innerHTML = "<h3>Full Mock Test</h3>" +
+    '<p class="note">A full NEET pattern paper: 180 questions (Physics 45, Chemistry 45, Biology 90), 3 hours, +4 and -1. A fresh paper is made for each day.</p>';
+  const mb = document.createElement("button");
+  mb.className = "btn";
+  mb.textContent = "Start full mock";
+  mb.addEventListener("click", () => buildMock(mb));
+  mc.appendChild(mb);
+  list.appendChild(mc);
+  const rc = document.createElement("div");
+  rc.className = "card";
+  const bms = getBookmarks();
+  rc.innerHTML = "<h3>Revision</h3>" +
+    '<p class="note">Practise the questions you got wrong in past tests, or the questions you bookmarked (' + bms.length + " bookmarked).</p>";
+  const eb = document.createElement("button");
+  eb.className = "btn";
+  eb.textContent = "Practise my mistakes";
+  eb.addEventListener("click", () => buildMistakes(eb));
+  const bb = document.createElement("button");
+  bb.className = "btn secondary";
+  bb.textContent = "Practise bookmarks";
+  bb.addEventListener("click", () => buildBookmarksPractice(bb));
+  rc.appendChild(eb);
+  rc.appendChild(document.createTextNode(" "));
+  rc.appendChild(bb);
+  if (bms.length) {
+    const cb = document.createElement("button");
+    cb.className = "btn secondary";
+    cb.textContent = "Clear bookmarks";
+    cb.addEventListener("click", () => {
+      if (confirm("Clear all your bookmarks?")) {
+        try { localStorage.removeItem(bmKey()); } catch (e) {}
+        loadTests();
+      }
+    });
+    rc.appendChild(document.createTextNode(" "));
+    rc.appendChild(cb);
+  }
+  list.appendChild(rc);
+  const cc = document.createElement("div");
+  cc.className = "card";
+  cc.innerHTML = "<h3>Build your own practice test</h3>" +
+    '<p class="note">Tick the chapters you want, choose how many questions, and a practice test is made on the spot.</p>';
+  const filt = document.createElement("input");
+  filt.placeholder = "Filter chapters";
+  filt.style.marginBottom = "8px";
+  const chapBox = document.createElement("div");
+  chapBox.className = "chaplist";
+  chapBox.id = "chapList";
+  testsCache.filter(t => !isDailyTest(t) && !isGenerated(t)).forEach(t => {
+    const p = parseTitle(t.title);
+    const lab = document.createElement("label");
+    lab.dataset.text = (p.inst + " " + p.subj + " " + p.chap).toLowerCase();
+    const cbx = document.createElement("input");
+    cbx.type = "checkbox";
+    cbx.value = t.id;
+    cbx.style.width = "auto";
+    lab.appendChild(cbx);
+    lab.appendChild(document.createTextNode(" " + p.inst + " " + p.subj + ": " + p.chap));
+    chapBox.appendChild(lab);
+  });
+  filt.addEventListener("input", () => {
+    const q = filt.value.trim().toLowerCase();
+    chapBox.querySelectorAll("label").forEach(l => { l.style.display = (!q || l.dataset.text.indexOf(q) >= 0) ? "" : "none"; });
+  });
+  const sel = document.createElement("select");
+  sel.id = "custCount";
+  sel.style.marginTop = "10px";
+  [10, 20, 30, 40, 50].forEach(n => {
+    const o = document.createElement("option");
+    o.value = n;
+    o.textContent = n + " questions";
+    if (n === 30) o.selected = true;
+    sel.appendChild(o);
+  });
+  const gb = document.createElement("button");
+  gb.className = "btn";
+  gb.textContent = "Build practice test";
+  gb.addEventListener("click", () => buildCustom(gb));
+  cc.appendChild(filt);
+  cc.appendChild(chapBox);
+  cc.appendChild(sel);
+  cc.appendChild(gb);
+  list.appendChild(cc);
+}
+
 /* ---------- test runner ---------- */
 let run = null;
 let timerId = null;
-async function startTest(test) {
+async function startTest(test, saved) {
   try {
     const q = await db("/questions?test_id=eq." + test.id + "&select=id,ord,subject,q,a,b,c,d&order=ord.asc");
     const qs = q.data || [];
     if (!qs.length) { alert("This test has no questions yet."); return; }
-    run = { test, qs, idx: 0, answers: {}, marked: {}, left: test.duration_min * 60, done: false };
+    if (!saved) {
+      const sv = getSavedRun(test.id);
+      if (sv) {
+        if (confirm("You have a paused attempt on this test with about " + Math.ceil(sv.left / 60) + " minutes left. Resume it?")) saved = sv;
+        else clearSavedRun(test.id);
+      } else {
+        const other = getAnySavedRun();
+        if (other && !confirm("You have a different test paused. Starting this one will discard that paused attempt. Continue?")) return;
+        if (other) clearSavedRun();
+      }
+    }
+    run = { test, qs, idx: saved ? (saved.idx || 0) : 0, answers: saved ? (saved.answers || {}) : {}, marked: saved ? (saved.marked || {}) : {}, times: saved ? (saved.times || {}) : {}, left: saved ? saved.left : test.duration_min * 60, done: false, curQ: null, curSince: 0 };
+    $("submitBtn").disabled = false;
     $("testsView").classList.add("hidden");
     $("resultView").classList.add("hidden");
     $("runnerView").classList.remove("hidden");
@@ -636,6 +1005,7 @@ async function startTest(test) {
     timerId = setInterval(() => {
       run.left--;
       tickTimer();
+      if (run.left % 15 === 0) saveRunState();
       if (run.left <= 0) { clearInterval(timerId); submitAttempt(true); }
     }, 1000);
   } catch (e) {
@@ -666,12 +1036,18 @@ function paintPalette() {
     btns[i].className = (has && mk) ? "ansmarked" : has ? "answered" : mk ? "marked" : "";
     if (i === run.idx) btns[i].classList.add("current");
   });
+  const a = run.qs.filter(q => run.answers[q.id] !== undefined).length;
+  const m = run.qs.filter(q => run.marked[q.id]).length;
+  $("palCounts").textContent = "Answered: " + a + " | Marked for review: " + m + " | Not answered: " + (run.qs.length - a);
 }
 function withImg(text) {
   return esc(text).replace(/\[img:([A-Za-z0-9._-]+)\]/g, '<br><img src="img/$1" alt="Diagram" style="max-width:100%;border:1px solid #ccc;border-radius:8px;margin-top:8px">');
 }
 function showQuestion() {
+  flushTime();
   const q = run.qs[run.idx];
+  run.curQ = q.id;
+  run.curSince = Date.now();
   $("qText").innerHTML = "Q" + (run.idx + 1) + ". " + withImg(q.q);
   const box = $("qOpts");
   box.innerHTML = "";
@@ -683,21 +1059,60 @@ function showQuestion() {
     box.appendChild(b);
   });
   $("markBtn").textContent = run.marked[q.id] ? "Unmark review" : "Mark for review";
+  $("bmBtn").textContent = isBookmarked(q.id) ? "★ Bookmarked" : "☆ Bookmark";
   paintPalette();
 }
 $("prevBtn").addEventListener("click", () => { if (run && run.idx > 0) { run.idx--; showQuestion(); } });
 $("nextBtn").addEventListener("click", () => { if (run && run.idx < run.qs.length - 1) { run.idx++; showQuestion(); } });
 $("clearBtn").addEventListener("click", () => { if (run) { delete run.answers[run.qs[run.idx].id]; showQuestion(); } });
 $("markBtn").addEventListener("click", () => { if (run) { const id = run.qs[run.idx].id; run.marked[id] = !run.marked[id]; showQuestion(); } });
+$("bmBtn").addEventListener("click", () => { if (run) { toggleBookmark(run.qs[run.idx].id); showQuestion(); } });
+$("pauseBtn").addEventListener("click", () => { if (run && confirm("Pause this test? Your answers, marks and time left are saved on this device.")) pauseTest(); });
 $("submitBtn").addEventListener("click", () => {
   if (!run) return;
   const left = run.qs.filter(q => run.answers[q.id] === undefined).length;
   if (confirm("Submit the test now?" + (left ? " " + left + " questions are still unanswered." : ""))) submitAttempt(false);
 });
+/* ---------- time tracking and pause / resume ---------- */
+function flushTime() {
+  if (!run || !run.curQ || !run.curSince) return;
+  const sec = Math.round((Date.now() - run.curSince) / 1000);
+  if (sec > 0) run.times[run.curQ] = (run.times[run.curQ] || 0) + sec;
+  run.curSince = Date.now();
+}
+function savedKey() { return "neet-paused-" + me.id; }
+function saveRunState() {
+  if (!run || run.done) return;
+  try {
+    localStorage.setItem(savedKey(), JSON.stringify({ testId: run.test.id, answers: run.answers, marked: run.marked, times: run.times, left: run.left, idx: run.idx }));
+  } catch (e) {}
+}
+function getAnySavedRun() {
+  try { return JSON.parse(localStorage.getItem(savedKey()) || "null"); } catch (e) { return null; }
+}
+function getSavedRun(testId) {
+  const s = getAnySavedRun();
+  return (s && s.testId === testId) ? s : null;
+}
+function clearSavedRun(testId) {
+  try {
+    const s = getAnySavedRun();
+    if (s && (!testId || s.testId === testId)) localStorage.removeItem(savedKey());
+  } catch (e) {}
+}
+function pauseTest() {
+  flushTime();
+  saveRunState();
+  clearInterval(timerId);
+  run = null;
+  showView("tests");
+}
+
 async function submitAttempt(auto) {
   if (!run || run.done) return;
   run.done = true;
   clearInterval(timerId);
+  flushTime();
   $("submitBtn").disabled = true;
   try {
     const q = await db("/questions?test_id=eq." + run.test.id + "&select=id,correct");
@@ -712,6 +1127,7 @@ async function submitAttempt(auto) {
       else if (picked === key[qq.id]) correct++;
       else wrong++;
     });
+    answers.__times = run.times;
     const score = correct * 4 - wrong;
     const ins = await db("/attempts", {
       method: "POST",
@@ -719,6 +1135,7 @@ async function submitAttempt(auto) {
       body: JSON.stringify({ user_id: me.id, test_id: run.test.id, score, correct, wrong, skipped, answers })
     });
     const attempt = ins.data[0];
+    clearSavedRun(run.test.id);
     $("runnerView").classList.add("hidden");
     showResult(attempt.id, auto);
   } catch (e) {
@@ -753,7 +1170,7 @@ function donutHtml(r, w, s, centre) {
   const rp = Math.round(r / tot * 100);
   const wp = Math.round(w / tot * 100);
   return '<div style="width:120px;height:120px;border-radius:50%;background:conic-gradient(#16a34a 0% ' + rp + '%, #dc2626 ' + rp + '% ' + (rp + wp) + '%, #9ca3af ' + (rp + wp) + '% 100%);display:flex;align-items:center;justify-content:center;flex:none">' +
-    '<div style="width:72px;height:72px;border-radius:50%;background:#fff;display:flex;align-items:center;justify-content:center;font-weight:700">' + centre + '</div></div>';
+    '<div style="width:72px;height:72px;border-radius:50%;background:var(--card);display:flex;align-items:center;justify-content:center;font-weight:700">' + centre + '</div></div>';
 }
 function analysisHtml(questions, attempt) {
   const stats = subjectStats(questions, attempt.answers || {});
@@ -847,7 +1264,9 @@ async function showResult(attemptId, auto) {
         else if (picked === oi) cls += " wrong";
         html += '<div class="' + cls + '">' + "ABCD"[oi] + ". " + esc(q[key]) + "</div>";
       });
-      html += '<p class="note">' + (picked === null || picked === undefined ? "You skipped this question. " : "") + withImg(q.explanation || "") + "</p></div>";
+      const tsec = (attempt.answers && attempt.answers.__times) ? attempt.answers.__times[q.id] : undefined;
+      html += '<p class="note">' + (picked === null || picked === undefined ? "You skipped this question. " : "") + (tsec !== undefined ? "Time you took: " + tsec + " seconds. " : "") + withImg(q.explanation || "") + "</p>" +
+        '<p style="margin:4px 0 0"><button class="btn secondary" onclick="toggleBookmark(\'' + q.id + '\', this)">' + (isBookmarked(q.id) ? "★ Bookmarked" : "☆ Bookmark") + "</button></p></div>";
     });
     html += '<button class="btn" onclick="showView(resultFrom)">&larr; Back</button></div>';
     box.innerHTML = html;
@@ -867,6 +1286,8 @@ async function loadMine() {
     if (!rows.length) {
       body.innerHTML = '<tr><td colspan="7" class="note">No attempts yet.</td></tr>';
       $("mineAnalysis").innerHTML = '<p class="note">No tests attempted yet. Your analysis will appear here after your first test.</p>';
+      $("mineGraph").innerHTML = '<p class="note">No tests attempted yet.</p>';
+      $("weakChaps").innerHTML = '<p class="note">No tests attempted yet.</p>';
       return;
     }
     const totR = rows.reduce((s, x) => s + x.correct, 0);
@@ -880,6 +1301,8 @@ async function loadMine() {
       '<p class="note" style="margin:0">Tests attempted: ' + rows.length + " | Average score: " + avgAll + " | Best score: " + bestAll + "<br>" +
       "Total right: " + totR + " | Total wrong: " + totW + " | Total skipped: " + totS + " | Overall accuracy: " + accAll + "% of attempted questions.<br>" +
       "Tap Review on any test below to see its subject-wise detailed analysis.</p></div>";
+    renderProgress(rows);
+    renderWeakChapters(rows);
     body.innerHTML = "";
     rows.forEach(at => {
       const test = testsCache.find(t => t.id === at.test_id);
@@ -901,6 +1324,83 @@ async function loadMine() {
   } catch (e) {
     body.innerHTML = '<tr><td colspan="7" class="note">Could not load records: ' + esc(e.message) + "</td></tr>";
     $("mineAnalysis").innerHTML = '<p class="note">Could not load your analysis.</p>';
+  }
+}
+
+/* ---------- progress graph and weak chapters ---------- */
+function renderProgress(rows) {
+  const box = $("mineGraph");
+  const chron = rows.slice().reverse().slice(-30);
+  if (chron.length < 2) {
+    box.innerHTML = '<p class="note">Attempt at least 2 tests to see your progress graph.</p>';
+    return;
+  }
+  const pts = chron.map(at => {
+    const tot = (at.correct + at.wrong + at.skipped) * 4 || 1;
+    return Math.round(at.score / tot * 100);
+  });
+  const W = 100, H = 36, step = W / (pts.length - 1);
+  const yOf = p => (H - 3 - (Math.max(0, p) / 100) * (H - 6)).toFixed(1);
+  const coords = pts.map((p, i) => (i * step).toFixed(1) + "," + yOf(p)).join(" ");
+  let dots = "";
+  pts.forEach((p, i) => { dots += '<circle cx="' + (i * step).toFixed(1) + '" cy="' + yOf(p) + '" r="1.1" fill="#1d4ed8"/>'; });
+  box.innerHTML = '<svg viewBox="0 0 ' + W + ' ' + H + '" style="width:100%;max-width:560px;background:var(--card);border:1px solid #e3e8f2;border-radius:8px"><polyline fill="none" stroke="#1d4ed8" stroke-width="1.4" points="' + coords + '"/>' + dots + '</svg>' +
+    '<p class="note">Score percent in your last ' + pts.length + ' tests, oldest to newest. Latest: ' + pts[pts.length - 1] + '%, best: ' + Math.max.apply(null, pts) + '%.</p>';
+}
+async function renderWeakChapters(rows) {
+  const box = $("weakChaps");
+  try {
+    const byTest = {};
+    rows.forEach(at => {
+      const t = testsCache.find(x => x.id === at.test_id);
+      if (!t || isDailyTest(t) || isGenerated(t)) return;
+      byTest[at.test_id] = t;
+    });
+    const ids = Object.keys(byTest);
+    if (!ids.length) {
+      box.innerHTML = '<p class="note">Attempt some chapter tests and your weak chapters will appear here.</p>';
+      return;
+    }
+    const stats = [];
+    for (const tid of ids) {
+      const q = await db("/questions?test_id=eq." + tid + "&select=id,correct");
+      const key = {};
+      (q.data || []).forEach(x => { key[x.id] = x.correct; });
+      let att = 0, wr = 0;
+      rows.filter(at => at.test_id === tid).forEach(at => {
+        Object.keys(at.answers || {}).forEach(qid => {
+          if (qid === "__times") return;
+          const p = at.answers[qid];
+          if (p === null || p === undefined || key[qid] === undefined) return;
+          att++;
+          if (p !== key[qid]) wr++;
+        });
+      });
+      if (att >= 3) stats.push({ test: byTest[tid], att: att, wr: wr, acc: Math.round((att - wr) / att * 100) });
+    }
+    stats.sort((a, b) => a.acc - b.acc);
+    const list = stats.slice(0, 8);
+    if (!list.length) {
+      box.innerHTML = '<p class="note">Attempt at least 3 questions in a chapter to see it here.</p>';
+      return;
+    }
+    box.innerHTML = "";
+    list.forEach(s => {
+      const p = parseTitle(s.test.title);
+      const row = document.createElement("div");
+      row.className = "row";
+      row.style.marginBottom = "8px";
+      row.innerHTML = '<span class="note" style="font-size:14px">' + esc(p.inst + " " + p.subj + ": " + p.chap) + "<br>Accuracy " + s.acc + "% (" + s.wr + " wrong of " + s.att + " attempted)</span>";
+      const b = document.createElement("button");
+      b.className = "btn secondary";
+      b.style.marginTop = "0";
+      b.textContent = "Practise";
+      b.addEventListener("click", () => startTest(s.test));
+      row.appendChild(b);
+      box.appendChild(row);
+    });
+  } catch (e) {
+    box.innerHTML = '<p class="note">Could not load weak chapters: ' + esc(e.message) + "</p>";
   }
 }
 
@@ -1083,6 +1583,53 @@ $("seedBtn").addEventListener("click", async () => {
   }
   $("seedBtn").disabled = false;
 });
+
+/* ---------- search ---------- */
+function renderSearch(q) {
+  const list = $("testList");
+  list.innerHTML = "";
+  const hits = testsCache.filter(t => !isDailyTest(t) && !isGenerated(t)).filter(t => {
+    const p = parseTitle(t.title);
+    return (p.inst + " " + p.subj + " " + p.chap).toLowerCase().indexOf(q) >= 0;
+  });
+  const h = document.createElement("h3");
+  h.style.margin = "6px 0 10px";
+  h.textContent = hits.length ? ("Chapters matching your search (" + hits.length + ")") : "No chapters match your search.";
+  list.appendChild(h);
+  hits.forEach(test => {
+    const p = parseTitle(test.title);
+    const attempts = myAttempts.filter(x => x.test_id === test.id);
+    const best = attempts.length ? Math.max.apply(null, attempts.map(x => x.score)) : null;
+    const card = document.createElement("div");
+    card.className = "card";
+    card.innerHTML = "<h3>" + esc(p.inst + " " + p.subj + ": " + p.chap) + "</h3>" +
+      '<p class="note">Duration: ' + test.duration_min + ' minutes. Marking: +4 for a right answer, -1 for a wrong answer.' +
+      (attempts.length ? " Your attempts: " + attempts.length + ", best score: " + best + "." : " Not attempted yet.") + "</p>";
+    const btn = document.createElement("button");
+    btn.className = "btn";
+    btn.textContent = "Start test";
+    btn.addEventListener("click", () => startTest(test));
+    card.appendChild(btn);
+    list.appendChild(card);
+  });
+}
+$("testSearch").addEventListener("input", () => {
+  const q = $("testSearch").value.trim().toLowerCase();
+  if (!q) { loadTests(); return; }
+  renderSearch(q);
+});
+
+/* ---------- theme ---------- */
+function paintThemeBtn() {
+  $("themeBtn").textContent = document.documentElement.getAttribute("data-theme") === "dark" ? "Light mode" : "Dark mode";
+}
+$("themeBtn").addEventListener("click", () => {
+  const next = document.documentElement.getAttribute("data-theme") === "dark" ? "light" : "dark";
+  document.documentElement.setAttribute("data-theme", next);
+  try { localStorage.setItem("neet-theme", next); } catch (e) {}
+  paintThemeBtn();
+});
+paintThemeBtn();
 
 /* ---------- boot ---------- */
 renderShell();
