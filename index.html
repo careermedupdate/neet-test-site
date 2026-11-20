@@ -578,9 +578,12 @@ function paintPalette() {
     if (i === run.idx) btns[i].classList.add("current");
   });
 }
+function withImg(text) {
+  return esc(text).replace(/\[img:([A-Za-z0-9._-]+)\]/g, '<br><img src="img/$1" alt="Diagram" style="max-width:100%;border:1px solid #ccc;border-radius:8px;margin-top:8px">');
+}
 function showQuestion() {
   const q = run.qs[run.idx];
-  $("qText").textContent = "Q" + (run.idx + 1) + ". " + q.q;
+  $("qText").innerHTML = "Q" + (run.idx + 1) + ". " + withImg(q.q);
   const box = $("qOpts");
   box.innerHTML = "";
   ["a", "b", "c", "d"].forEach((key, i) => {
@@ -694,14 +697,14 @@ async function showResult(attemptId, auto) {
     html += '<div class="card"><h3>Answer review</h3>';
     (qs.data || []).forEach((q, i) => {
       const picked = attempt.answers[q.id];
-      html += '<div style="margin-bottom:14px"><div class="qtext">Q' + (i + 1) + ". " + esc(q.q) + "</div>";
+      html += '<div style="margin-bottom:14px"><div class="qtext">Q' + (i + 1) + ". " + withImg(q.q) + "</div>";
       ["a", "b", "c", "d"].forEach((key, oi) => {
         let cls = "opt";
         if (oi === q.correct) cls += " right";
         else if (picked === oi) cls += " wrong";
         html += '<div class="' + cls + '">' + "ABCD"[oi] + ". " + esc(q[key]) + "</div>";
       });
-      html += '<p class="note">' + (picked === null || picked === undefined ? "You skipped this question. " : "") + esc(q.explanation || "") + "</p></div>";
+      html += '<p class="note">' + (picked === null || picked === undefined ? "You skipped this question. " : "") + withImg(q.explanation || "") + "</p></div>";
     });
     html += '<button class="btn" onclick="showView(\'tests\')">Back to tests</button></div>';
     box.innerHTML = html;
