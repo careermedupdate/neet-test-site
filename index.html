@@ -537,6 +537,7 @@ async function loadTests() {
     instOrder.sort((x, y) => (x === "General" ? 1 : 0) - (y === "General" ? 1 : 0));
     const head = document.createElement("h3");
     head.style.margin = "18px 0 8px";
+    head.style.textAlign = "center";
     head.textContent = "Choose your module";
     list.appendChild(head);
     for (const inst of instOrder) {
