@@ -127,6 +127,7 @@
     <nav class="main">
       <button id="navTests" class="active">Tests</button>
       <button id="navRevision">Revision</button>
+      <button id="navTimetable">Time Table</button>
       <button id="navMine">My records</button>
       <button id="navProfile">Profile</button>
       <button id="navBoard">Leaderboard</button>
@@ -155,6 +156,24 @@
         <p class="note" id="revBmText">Loading...</p>
         <button class="btn" id="revBmBtn">Practise bookmarks</button>
         <button class="btn secondary" id="revBmClear">Clear bookmarks</button>
+      </div>
+    </div>
+
+    <div id="timetableView" class="hidden">
+      <div class="card">
+        <h3>My time table</h3>
+        <p class="note">Your daily study plan. Tap any time or activity to edit it. Changes save on this device automatically.</p>
+        <div class="tablewrap"><table>
+          <thead><tr><th>Time</th><th>Activity</th><th></th></tr></thead>
+          <tbody id="ttBody"></tbody>
+        </table></div>
+        <label>Time (for example 6:30 - 8:00 AM)</label>
+        <input id="ttTime" placeholder="6:30 - 8:00 AM">
+        <label>Activity</label>
+        <input id="ttAct" placeholder="Physics: Rotational Motion">
+        <button class="btn" id="ttAdd">Add to time table</button>
+        <button class="btn secondary" id="ttReset">Reset to suggested time table</button>
+        <div class="msg" id="ttMsg"></div>
       </div>
     </div>
 
@@ -417,12 +436,14 @@ $("forgotBtn").addEventListener("click", async () => {
 function showView(v) {
   $("navTests").classList.toggle("active", v === "tests");
   $("navRevision").classList.toggle("active", v === "revision");
+  $("navTimetable").classList.toggle("active", v === "timetable");
   $("navMine").classList.toggle("active", v === "mine");
   $("navProfile").classList.toggle("active", v === "profile");
   $("navBoard").classList.toggle("active", v === "board");
   $("navAdmin").classList.toggle("active", v === "admin");
   $("testsView").classList.toggle("hidden", v !== "tests");
   $("revisionView").classList.toggle("hidden", v !== "revision");
+  $("timetableView").classList.toggle("hidden", v !== "timetable");
   $("mineView").classList.toggle("hidden", v !== "mine");
   $("profileView").classList.toggle("hidden", v !== "profile");
   $("boardView").classList.toggle("hidden", v !== "board");
@@ -432,6 +453,7 @@ function showView(v) {
   window.scrollTo(0, 0);
   if (v === "tests") loadTests();
   if (v === "revision") renderRevision();
+  if (v === "timetable") renderTimetable();
   if (v === "mine") loadMine();
   if (v === "profile") renderProfile();
   if (v === "board") loadBoard();
@@ -439,6 +461,7 @@ function showView(v) {
 }
 $("navTests").addEventListener("click", () => showView("tests"));
 $("navRevision").addEventListener("click", () => showView("revision"));
+$("navTimetable").addEventListener("click", () => showView("timetable"));
 $("navMine").addEventListener("click", () => showView("mine"));
 $("navProfile").addEventListener("click", () => showView("profile"));
 $("navBoard").addEventListener("click", () => showView("board"));
@@ -985,6 +1008,7 @@ async function startTest(test, saved) {
     $("submitBtn").disabled = false;
     $("testsView").classList.add("hidden");
     $("revisionView").classList.add("hidden");
+    $("timetableView").classList.add("hidden");
     $("mineView").classList.add("hidden");
     $("profileView").classList.add("hidden");
     $("boardView").classList.add("hidden");
@@ -1593,6 +1617,97 @@ $("revBmClear").addEventListener("click", () => {
   if (confirm("Clear all your bookmarks?")) {
     try { localStorage.removeItem(bmKey()); } catch (e) {}
     renderRevision();
+  }
+});
+
+/* ---------- time table ---------- */
+const TT_DEFAULT = [
+  ["6:00 - 6:30 AM", "Wake up and freshen up"],
+  ["6:30 - 8:00 AM", "Physics"],
+  ["8:00 - 8:30 AM", "Breakfast"],
+  ["8:30 - 10:00 AM", "Chemistry"],
+  ["10:00 - 10:15 AM", "Short break"],
+  ["10:15 - 11:45 AM", "Botany"],
+  ["11:45 AM - 1:00 PM", "Zoology"],
+  ["1:00 - 2:00 PM", "Lunch and rest"],
+  ["2:00 - 3:30 PM", "NCERT Biology reading"],
+  ["3:30 - 5:00 PM", "Physics numericals practice"],
+  ["5:00 - 5:30 PM", "Break and a short walk"],
+  ["5:30 - 7:00 PM", "Chemistry practice questions"],
+  ["7:00 - 7:45 PM", "Daily Test on this site"],
+  ["7:45 - 8:30 PM", "Dinner"],
+  ["8:30 - 10:00 PM", "Revision of today's topics and mistake book"],
+  ["10:00 - 10:30 PM", "Plan the next day, light reading"],
+  ["10:30 PM", "Sleep"]
+];
+function ttKey() { return "neet-timetable-" + me.id; }
+function ttCopy(rows) { return rows.map(r => r.slice()); }
+function getTimetable() {
+  try {
+    const t = JSON.parse(localStorage.getItem(ttKey()) || "null");
+    return (Array.isArray(t) && t.length) ? t : ttCopy(TT_DEFAULT);
+  } catch (e) { return ttCopy(TT_DEFAULT); }
+}
+function saveTimetable(rows) {
+  try { localStorage.setItem(ttKey(), JSON.stringify(rows)); } catch (e) {}
+}
+function renderTimetable() {
+  const rows = getTimetable();
+  const body = $("ttBody");
+  body.innerHTML = "";
+  rows.forEach((r, i) => {
+    const tr = document.createElement("tr");
+    const tdT = document.createElement("td");
+    tdT.textContent = r[0];
+    tdT.contentEditable = "true";
+    const tdA = document.createElement("td");
+    tdA.textContent = r[1];
+    tdA.contentEditable = "true";
+    [tdT, tdA].forEach((td, col) => {
+      td.addEventListener("blur", () => {
+        const cur = getTimetable();
+        if (cur[i]) { cur[i][col] = td.textContent.trim(); saveTimetable(cur); }
+      });
+    });
+    const tdD = document.createElement("td");
+    const del = document.createElement("button");
+    del.className = "btn secondary";
+    del.style.marginTop = "0";
+    del.textContent = "Delete";
+    del.addEventListener("click", () => {
+      const cur = getTimetable();
+      cur.splice(i, 1);
+      saveTimetable(cur);
+      renderTimetable();
+    });
+    tdD.appendChild(del);
+    tr.appendChild(tdT);
+    tr.appendChild(tdA);
+    tr.appendChild(tdD);
+    body.appendChild(tr);
+  });
+}
+$("ttAdd").addEventListener("click", () => {
+  const t = $("ttTime").value.trim();
+  const a = $("ttAct").value.trim();
+  if (!t || !a) {
+    $("ttMsg").textContent = "Enter both the time and the activity.";
+    $("ttMsg").className = "msg err";
+    return;
+  }
+  const cur = getTimetable();
+  cur.push([t, a]);
+  saveTimetable(cur);
+  $("ttTime").value = "";
+  $("ttAct").value = "";
+  $("ttMsg").textContent = "Added to your time table.";
+  $("ttMsg").className = "msg ok";
+  renderTimetable();
+});
+$("ttReset").addEventListener("click", () => {
+  if (confirm("Replace your time table with the suggested one?")) {
+    saveTimetable(ttCopy(TT_DEFAULT));
+    renderTimetable();
   }
 });
 
