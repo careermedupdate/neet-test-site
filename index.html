@@ -352,6 +352,11 @@ $("navAdmin").addEventListener("click", () => showView("admin"));
 "use strict";
 /* ---------- tests list ---------- */
 let testsCache = [];
+function todayStr() {
+  const d = new Date();
+  return d.getFullYear() + "-" + String(d.getMonth() + 1).padStart(2, "0") + "-" + String(d.getDate()).padStart(2, "0");
+}
+function isDailyTest(t) { return t.title.indexOf("Daily Test - ") === 0; }
 async function loadTests() {
   const list = $("testList");
   list.innerHTML = '<div class="card"><p class="note">Loading tests...</p></div>';
@@ -367,23 +372,97 @@ async function loadTests() {
     }
     $("seedCard").classList.add("hidden");
     list.innerHTML = "";
+    /* Daily test card, always first */
+    const dTitle = "Daily Test - " + todayStr();
+    const dTest = testsCache.find(x => x.title === dTitle);
+    const dAttempts = dTest ? mine.filter(x => x.test_id === dTest.id) : [];
+    const dBest = dAttempts.length ? Math.max.apply(null, dAttempts.map(x => x.score)) : null;
+    const dCard = document.createElement("div");
+    dCard.className = "card";
+    dCard.innerHTML = "<h3>Daily Test</h3>" +
+      '<p class="note">A fresh test of 30 questions every day, picked from all the tests on this site. Duration: 45 minutes. Marking: +4 for a right answer, -1 for a wrong answer.' +
+      (dAttempts.length ? " Your attempts today: " + dAttempts.length + ", best score: " + dBest + "." : " Not attempted today yet.") + "</p>";
+    const dBtn = document.createElement("button");
+    dBtn.className = "btn";
+    dBtn.textContent = "Start today's test";
+    dBtn.addEventListener("click", () => startDailyTest());
+    dCard.appendChild(dBtn);
+    list.appendChild(dCard);
+    /* Regular tests, grouped by the part before ":" in the title */
+    const groups = {};
+    const order = [];
     for (const test of testsCache) {
-      const attempts = mine.filter(x => x.test_id === test.id);
-      const best = attempts.length ? Math.max.apply(null, attempts.map(x => x.score)) : null;
-      const card = document.createElement("div");
-      card.className = "card";
-      card.innerHTML = "<h3>" + esc(test.title) + "</h3>" +
-        '<p class="note">Duration: ' + test.duration_min + ' minutes. Marking: +4 for a right answer, -1 for a wrong answer.' +
-        (attempts.length ? " Your attempts: " + attempts.length + ", best score: " + best + "." : " Not attempted yet.") + "</p>";
-      const btn = document.createElement("button");
-      btn.className = "btn";
-      btn.textContent = "Start test";
-      btn.addEventListener("click", () => startTest(test));
-      card.appendChild(btn);
-      list.appendChild(card);
+      if (isDailyTest(test)) continue;
+      const g = test.title.indexOf(":") > 0 ? test.title.split(":")[0] : "General";
+      if (!groups[g]) { groups[g] = []; order.push(g); }
+      groups[g].push(test);
+    }
+    for (const g of order) {
+      const h = document.createElement("h3");
+      h.style.margin = "18px 0 8px";
+      h.textContent = g;
+      list.appendChild(h);
+      for (const test of groups[g]) {
+        const attempts = mine.filter(x => x.test_id === test.id);
+        const best = attempts.length ? Math.max.apply(null, attempts.map(x => x.score)) : null;
+        const card = document.createElement("div");
+        card.className = "card";
+        card.innerHTML = "<h3>" + esc(test.title) + "</h3>" +
+          '<p class="note">Duration: ' + test.duration_min + ' minutes. Marking: +4 for a right answer, -1 for a wrong answer.' +
+          (attempts.length ? " Your attempts: " + attempts.length + ", best score: " + best + "." : " Not attempted yet.") + "</p>";
+        const btn = document.createElement("button");
+        btn.className = "btn";
+        btn.textContent = "Start test";
+        btn.addEventListener("click", () => startTest(test));
+        card.appendChild(btn);
+        list.appendChild(card);
+      }
     }
   } catch (e) {
     list.innerHTML = '<div class="card"><p class="msg err">Could not load tests: ' + esc(e.message) + "</p></div>";
+  }
+}
+
+/* ---------- daily test ---------- */
+async function startDailyTest() {
+  const title = "Daily Test - " + todayStr();
+  try {
+    const ex = await db("/tests?title=eq." + encodeURIComponent(title) + "&select=id,title,duration_min");
+    if (ex.data && ex.data.length) { startTest(ex.data[0]); return; }
+    const all = await db("/tests?select=id,title");
+    const dailyIds = (all.data || []).filter(isDailyTest).map(t => t.id);
+    let poolPath = "/questions?select=id";
+    if (dailyIds.length) poolPath += "&test_id=not.in.(" + dailyIds.join(",") + ")";
+    const poolRes = await db(poolPath);
+    const ids = (poolRes.data || []).map(r => r.id);
+    if (!ids.length) { alert("No questions are available yet for a daily test."); return; }
+    let seed = 0;
+    const s = todayStr();
+    for (let i = 0; i < s.length; i++) seed = (seed * 31 + s.charCodeAt(i)) >>> 0;
+    const rnd = () => { seed = (seed * 1664525 + 1013904223) >>> 0; return seed / 4294967296; };
+    for (let i = ids.length - 1; i > 0; i--) {
+      const j = Math.floor(rnd() * (i + 1));
+      const tmp = ids[i]; ids[i] = ids[j]; ids[j] = tmp;
+    }
+    const pick = ids.slice(0, Math.min(30, ids.length));
+    const full = await db("/questions?id=in.(" + pick.join(",") + ")&select=subject,q,a,b,c,d,correct,explanation");
+    const byId = {};
+    (full.data || []).forEach(r => { byId[r.id] = r; });
+    const ordered = pick.map(id => byId[id]).filter(Boolean);
+    const t = await db("/tests", {
+      method: "POST",
+      headers: { "Prefer": "return=representation" },
+      body: JSON.stringify({ title: title, duration_min: 45 })
+    });
+    const test = t.data[0];
+    const rows = ordered.map((q, i) => ({
+      test_id: test.id, ord: i + 1, subject: q.subject, q: q.q, a: q.a, b: q.b, c: q.c, d: q.d, correct: q.correct, explanation: q.explanation
+    }));
+    await db("/questions", { method: "POST", body: JSON.stringify(rows) });
+    testsCache.push(test);
+    startTest(test);
+  } catch (e) {
+    alert("Could not start the daily test: " + e.message);
   }
 }
 
