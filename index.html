@@ -145,6 +145,10 @@
 
     <div id="mineView" class="hidden">
       <div class="card">
+        <h3>My analysis</h3>
+        <div id="mineAnalysis"><p class="note">Loading...</p></div>
+      </div>
+      <div class="card">
         <h3>My records</h3>
         <div class="tablewrap"><table>
           <thead><tr><th>Date</th><th>Test</th><th>Score</th><th>Right</th><th>Wrong</th><th>Skipped</th><th></th></tr></thead>
@@ -632,6 +636,47 @@ async function submitAttempt(auto) {
     $("submitBtn").disabled = false;
   }
 }
+/* ---------- detailed analysis ---------- */
+function subjectStats(questions, answers) {
+  const bySubj = {};
+  const order = [];
+  questions.forEach(q => {
+    const s = q.subject || "General";
+    if (!bySubj[s]) { bySubj[s] = { total: 0, right: 0, wrong: 0, skipped: 0 }; order.push(s); }
+    const st = bySubj[s];
+    st.total++;
+    const picked = answers[q.id];
+    if (picked === null || picked === undefined) st.skipped++;
+    else if (picked === q.correct) st.right++;
+    else st.wrong++;
+  });
+  return order.map(s => {
+    const st = bySubj[s];
+    const att = st.right + st.wrong;
+    return { subj: s, total: st.total, right: st.right, wrong: st.wrong, skipped: st.skipped, score: st.right * 4 - st.wrong, acc: att ? Math.round(st.right / att * 100) : null };
+  });
+}
+function analysisHtml(questions, attempt) {
+  const stats = subjectStats(questions, attempt.answers || {});
+  const attempted = attempt.correct + attempt.wrong;
+  const acc = attempted ? Math.round(attempt.correct / attempted * 100) : 0;
+  let h = '<div class="card"><h3>Detailed analysis</h3>' +
+    '<p class="note">Accuracy: ' + acc + '% of the questions you attempted. Attempted: ' + attempted + ' of ' + questions.length + '.</p>' +
+    '<div class="tablewrap"><table><thead><tr><th>Subject</th><th>Questions</th><th>Right</th><th>Wrong</th><th>Skipped</th><th>Score</th><th>Accuracy</th></tr></thead><tbody>';
+  stats.forEach(st => {
+    h += "<tr><td>" + esc(st.subj) + "</td><td>" + st.total + "</td><td>" + st.right + "</td><td>" + st.wrong + "</td><td>" + st.skipped + "</td><td>" + st.score + "</td><td>" + (st.acc === null ? "-" : st.acc + "%") + "</td></tr>";
+  });
+  h += "</tbody></table></div>";
+  const tried = stats.filter(st => st.acc !== null);
+  if (tried.length > 1) {
+    let weak = tried[0];
+    tried.forEach(st => { if (st.acc < weak.acc) weak = st; });
+    h += '<p class="note">Weakest subject in this test: ' + esc(weak.subj) + " (" + weak.acc + '% accuracy). Practise more chapters of ' + esc(weak.subj) + ".</p>";
+  }
+  h += "</div>";
+  return h;
+}
+
 async function showResult(attemptId, auto) {
   const box = $("resultView");
   box.classList.remove("hidden");
@@ -645,6 +690,7 @@ async function showResult(attemptId, auto) {
       (auto ? '<p class="note">Time finished, the test was submitted automatically.</p>' : "") +
       '<div class="score">' + attempt.score + " / " + (qs.data.length * 4) + "</div>" +
       '<p class="note">Right: ' + attempt.correct + " | Wrong: " + attempt.wrong + " | Skipped: " + attempt.skipped + " | " + esc(fmtDate(attempt.created_at)) + "</p></div>";
+    html += analysisHtml(qs.data || [], attempt);
     html += '<div class="card"><h3>Answer review</h3>';
     (qs.data || []).forEach((q, i) => {
       const picked = attempt.answers[q.id];
@@ -671,7 +717,21 @@ async function loadMine() {
   try {
     const a = await db("/attempts?user_id=eq." + me.id + "&select=*&order=created_at.desc");
     const rows = a.data || [];
-    if (!rows.length) { body.innerHTML = '<tr><td colspan="7" class="note">No attempts yet.</td></tr>'; return; }
+    if (!rows.length) {
+      body.innerHTML = '<tr><td colspan="7" class="note">No attempts yet.</td></tr>';
+      $("mineAnalysis").innerHTML = '<p class="note">No tests attempted yet. Your analysis will appear here after your first test.</p>';
+      return;
+    }
+    const totR = rows.reduce((s, x) => s + x.correct, 0);
+    const totW = rows.reduce((s, x) => s + x.wrong, 0);
+    const totS = rows.reduce((s, x) => s + x.skipped, 0);
+    const attAll = totR + totW;
+    const accAll = attAll ? Math.round(totR / attAll * 100) : 0;
+    const bestAll = Math.max.apply(null, rows.map(x => x.score));
+    const avgAll = Math.round(rows.reduce((s, x) => s + x.score, 0) / rows.length);
+    $("mineAnalysis").innerHTML = '<p class="note">Tests attempted: ' + rows.length + " | Average score: " + avgAll + " | Best score: " + bestAll + "<br>" +
+      "Total right: " + totR + " | Total wrong: " + totW + " | Total skipped: " + totS + " | Overall accuracy: " + accAll + "% of attempted questions.<br>" +
+      "Tap Review on any test below to see its subject-wise detailed analysis.</p>";
     body.innerHTML = "";
     rows.forEach(at => {
       const test = testsCache.find(t => t.id === at.test_id);
@@ -693,6 +753,7 @@ async function loadMine() {
     });
   } catch (e) {
     body.innerHTML = '<tr><td colspan="7" class="note">Could not load records: ' + esc(e.message) + "</td></tr>";
+    $("mineAnalysis").innerHTML = '<p class="note">Could not load your analysis.</p>';
   }
 }
 
