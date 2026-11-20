@@ -352,6 +352,7 @@ $("navAdmin").addEventListener("click", () => showView("admin"));
 "use strict";
 /* ---------- tests list ---------- */
 let testsCache = [];
+let myAttempts = [];
 function todayStr() {
   const d = new Date();
   return d.getFullYear() + "-" + String(d.getMonth() + 1).padStart(2, "0") + "-" + String(d.getDate()).padStart(2, "0");
@@ -365,6 +366,7 @@ async function loadTests() {
     testsCache = t.data || [];
     const a = await db("/attempts?user_id=eq." + me.id + "&select=id,test_id,score");
     const mine = a.data || [];
+    myAttempts = mine;
     if (!testsCache.length) {
       list.innerHTML = "";
       $("seedCard").classList.toggle("hidden", me.role !== "admin");
@@ -388,39 +390,93 @@ async function loadTests() {
     dBtn.addEventListener("click", () => startDailyTest());
     dCard.appendChild(dBtn);
     list.appendChild(dCard);
-    /* Regular tests, grouped by the part before ":" in the title */
-    const groups = {};
-    const order = [];
+    /* Institutes first: one card per institute, chapters open inside it */
+    const insts = {};
+    const instOrder = [];
     for (const test of testsCache) {
       if (isDailyTest(test)) continue;
-      const g = test.title.indexOf(":") > 0 ? test.title.split(":")[0] : "General";
-      if (!groups[g]) { groups[g] = []; order.push(g); }
-      groups[g].push(test);
+      const p = parseTitle(test.title);
+      if (!insts[p.inst]) { insts[p.inst] = []; instOrder.push(p.inst); }
+      insts[p.inst].push(test);
     }
-    for (const g of order) {
-      const h = document.createElement("h3");
-      h.style.margin = "18px 0 8px";
-      h.textContent = g;
-      list.appendChild(h);
-      for (const test of groups[g]) {
-        const attempts = mine.filter(x => x.test_id === test.id);
-        const best = attempts.length ? Math.max.apply(null, attempts.map(x => x.score)) : null;
-        const card = document.createElement("div");
-        card.className = "card";
-        card.innerHTML = "<h3>" + esc(test.title) + "</h3>" +
-          '<p class="note">Duration: ' + test.duration_min + ' minutes. Marking: +4 for a right answer, -1 for a wrong answer.' +
-          (attempts.length ? " Your attempts: " + attempts.length + ", best score: " + best + "." : " Not attempted yet.") + "</p>";
-        const btn = document.createElement("button");
-        btn.className = "btn";
-        btn.textContent = "Start test";
-        btn.addEventListener("click", () => startTest(test));
-        card.appendChild(btn);
-        list.appendChild(card);
-      }
+    instOrder.sort((x, y) => (x === "General" ? 1 : 0) - (y === "General" ? 1 : 0));
+    const head = document.createElement("h3");
+    head.style.margin = "18px 0 8px";
+    head.textContent = "Choose your module";
+    list.appendChild(head);
+    for (const inst of instOrder) {
+      const card = document.createElement("div");
+      card.className = "card";
+      card.innerHTML = "<h3>" + esc(inst) + "</h3>" +
+        '<p class="note">' + insts[inst].length + " chapter tests. Tap to see the chapters.</p>";
+      const btn = document.createElement("button");
+      btn.className = "btn";
+      btn.textContent = "View chapters";
+      btn.addEventListener("click", () => renderInstitute(inst));
+      card.appendChild(btn);
+      list.appendChild(card);
     }
   } catch (e) {
     list.innerHTML = '<div class="card"><p class="msg err">Could not load tests: ' + esc(e.message) + "</p></div>";
   }
+}
+
+/* ---------- institute page: subjects, then chapter tests ---------- */
+function parseTitle(title) {
+  const idx = title.indexOf(":");
+  if (idx < 0) return { inst: "General", subj: "", chap: title };
+  const head = title.slice(0, idx).trim();
+  const chap = title.slice(idx + 1).trim();
+  const sp = head.indexOf(" ");
+  if (sp < 0) return { inst: head, subj: "", chap: chap };
+  return { inst: head.slice(0, sp), subj: head.slice(sp + 1).trim(), chap: chap };
+}
+function renderInstitute(inst) {
+  const list = $("testList");
+  list.innerHTML = "";
+  const back = document.createElement("button");
+  back.className = "btn";
+  back.textContent = "← All modules";
+  back.addEventListener("click", () => loadTests());
+  list.appendChild(back);
+  const h = document.createElement("h3");
+  h.style.margin = "14px 0 8px";
+  h.textContent = inst + " chapter tests";
+  list.appendChild(h);
+  const groups = {};
+  const order = [];
+  for (const test of testsCache) {
+    if (isDailyTest(test)) continue;
+    const p = parseTitle(test.title);
+    if (p.inst !== inst) continue;
+    if (!groups[p.subj]) { groups[p.subj] = []; order.push(p.subj); }
+    groups[p.subj].push({ test: test, chap: p.chap });
+  }
+  for (const subj of order) {
+    if (subj) {
+      const sh = document.createElement("h3");
+      sh.style.margin = "18px 0 8px";
+      sh.textContent = inst + " " + subj;
+      list.appendChild(sh);
+    }
+    for (const item of groups[subj]) {
+      const test = item.test;
+      const attempts = myAttempts.filter(x => x.test_id === test.id);
+      const best = attempts.length ? Math.max.apply(null, attempts.map(x => x.score)) : null;
+      const card = document.createElement("div");
+      card.className = "card";
+      card.innerHTML = "<h3>" + esc(item.chap) + "</h3>" +
+        '<p class="note">Duration: ' + test.duration_min + ' minutes. Marking: +4 for a right answer, -1 for a wrong answer.' +
+        (attempts.length ? " Your attempts: " + attempts.length + ", best score: " + best + "." : " Not attempted yet.") + "</p>";
+      const btn = document.createElement("button");
+      btn.className = "btn";
+      btn.textContent = "Start test";
+      btn.addEventListener("click", () => startTest(test));
+      card.appendChild(btn);
+      list.appendChild(card);
+    }
+  }
+  window.scrollTo(0, 0);
 }
 
 /* ---------- daily test ---------- */
