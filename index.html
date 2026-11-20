@@ -175,6 +175,14 @@
         <button class="btn secondary" id="ttReset">Reset to suggested time table</button>
         <div class="msg" id="ttMsg"></div>
       </div>
+      <div class="card">
+        <h3>Daily Test syllabus</h3>
+        <p class="note">Every day's Daily Test has 10 questions each from one Physics, one Chemistry and one Biology chapter. The chapters rotate day by day through the full syllabus, as shown below.</p>
+        <div class="tablewrap"><table>
+          <thead><tr><th>Date</th><th>Physics</th><th>Chemistry</th><th>Biology</th></tr></thead>
+          <tbody id="sylBody"></tbody>
+        </table></div>
+      </div>
     </div>
 
     <div id="runnerView" class="hidden">
@@ -551,7 +559,7 @@ async function loadTests() {
     const dCard = document.createElement("div");
     dCard.className = "card";
     dCard.innerHTML = "<h3>Daily Test</h3>" +
-      '<p class="note">A fresh test of 30 questions every day, picked from all the tests on this site. Duration: 45 minutes. Marking: +4 for a right answer, -1 for a wrong answer.' +
+      '<p class="note">A fresh test of 30 questions every day: 10 Physics, 10 Chemistry and 10 Biology, from the chapters in today\'s syllabus (see the Time Table tab). Duration: 45 minutes. Marking: +4 for a right answer, -1 for a wrong answer.' +
       (dAttempts.length ? " Your attempts today: " + dAttempts.length + ", best score: " + dBest + "." : " Not attempted today yet.") + "</p>";
     const dBtn = document.createElement("button");
     dBtn.className = "btn";
@@ -563,6 +571,13 @@ async function loadTests() {
       sp.className = "note";
       sp.textContent = "Your daily test streak: " + streak + (streak === 1 ? " day" : " days") + " in a row.";
       dCard.appendChild(sp);
+    }
+    const plan0 = dailyPlan(todayStr());
+    if (plan0.phys || plan0.chem || plan0.bio) {
+      const yp = document.createElement("p");
+      yp.className = "note";
+      yp.innerHTML = "<b>Today's syllabus:</b> Physics: " + esc(plan0.phys) + " | Chemistry: " + esc(plan0.chem) + " | Biology: " + esc(plan0.bio);
+      dCard.appendChild(yp);
     }
     dCard.appendChild(dBtn);
     list.appendChild(dCard);
@@ -657,6 +672,59 @@ function renderInstitute(inst) {
   window.scrollTo(0, 0);
 }
 
+/* ---------- daily test syllabus plan ---------- */
+function chapterNamesBySubject() {
+  const map = { Physics: [], Chemistry: [], Biology: [] };
+  const seen = { Physics: {}, Chemistry: {}, Biology: {} };
+  for (const t of testsCache) {
+    if (isDailyTest(t) || isGenerated(t)) continue;
+    const p = parseTitle(t.title);
+    if (!map[p.subj] || seen[p.subj][p.chap]) continue;
+    seen[p.subj][p.chap] = 1;
+    map[p.subj].push(p.chap);
+  }
+  for (const s of Object.keys(map)) map[s].sort();
+  return map;
+}
+function dayIndexFor(dateStr) {
+  const parts = dateStr.split("-").map(Number);
+  return Math.round((Date.UTC(parts[0], parts[1] - 1, parts[2]) - Date.UTC(2026, 0, 1)) / 86400000);
+}
+function dailyPlan(dateStr) {
+  const map = chapterNamesBySubject();
+  const di = dayIndexFor(dateStr);
+  const pickChap = arr => arr.length ? arr[((di % arr.length) + arr.length) % arr.length] : "";
+  return { phys: pickChap(map.Physics), chem: pickChap(map.Chemistry), bio: pickChap(map.Biology) };
+}
+function dateStrPlus(n) {
+  const d = new Date();
+  d.setDate(d.getDate() + n);
+  return d.getFullYear() + "-" + String(d.getMonth() + 1).padStart(2, "0") + "-" + String(d.getDate()).padStart(2, "0");
+}
+async function renderSyllabus() {
+  const body = $("sylBody");
+  if (!body) return;
+  if (!testsCache.length) {
+    try {
+      const r = await db("/tests?select=id,title,duration_min");
+      testsCache = r.data || [];
+    } catch (e) {}
+  }
+  body.innerHTML = "";
+  for (let n = 0; n < 14; n++) {
+    const ds = dateStrPlus(n);
+    const plan = dailyPlan(ds);
+    const tr = document.createElement("tr");
+    const cells = [(n === 0 ? ds + " (today)" : ds), plan.phys, plan.chem, plan.bio];
+    for (const c of cells) {
+      const td = document.createElement("td");
+      td.textContent = c;
+      tr.appendChild(td);
+    }
+    body.appendChild(tr);
+  }
+}
+
 /* ---------- daily test ---------- */
 async function startDailyTest() {
   const title = "Daily Test - " + todayStr();
@@ -664,22 +732,41 @@ async function startDailyTest() {
     const ex = await db("/tests?title=eq." + encodeURIComponent(title) + "&select=id,title,duration_min");
     if (ex.data && ex.data.length) { startTest(ex.data[0]); return; }
     const all = await db("/tests?select=id,title");
-    const dailyIds = (all.data || []).filter(t => isDailyTest(t) || isGenerated(t)).map(t => t.id);
-    let poolPath = "/questions?select=id";
-    if (dailyIds.length) poolPath += "&test_id=not.in.(" + dailyIds.join(",") + ")";
-    const poolRes = await db(poolPath);
-    const ids = (poolRes.data || []).map(r => r.id);
-    if (!ids.length) { alert("No questions are available yet for a daily test."); return; }
+    const plan = dailyPlan(todayStr());
     let seed = 0;
     const s = todayStr();
     for (let i = 0; i < s.length; i++) seed = (seed * 31 + s.charCodeAt(i)) >>> 0;
     const rnd = () => { seed = (seed * 1664525 + 1013904223) >>> 0; return seed / 4294967296; };
-    for (let i = ids.length - 1; i > 0; i--) {
-      const j = Math.floor(rnd() * (i + 1));
-      const tmp = ids[i]; ids[i] = ids[j]; ids[j] = tmp;
+    const shuffled = arr => {
+      const a = arr.slice();
+      for (let i = a.length - 1; i > 0; i--) {
+        const j = Math.floor(rnd() * (i + 1));
+        const tmp = a[i]; a[i] = a[j]; a[j] = tmp;
+      }
+      return a;
+    };
+    const chapterTests = (all.data || []).filter(t => !isDailyTest(t) && !isGenerated(t));
+    const pick = [];
+    for (const subj of ["Physics", "Chemistry", "Biology"]) {
+      const want = subj === "Physics" ? plan.phys : subj === "Chemistry" ? plan.chem : plan.bio;
+      const plannedIds = chapterTests.filter(t => { const p = parseTitle(t.title); return p.subj === subj && p.chap === want; }).map(t => t.id);
+      let qids = [];
+      if (plannedIds.length) {
+        const qres = await db("/questions?select=id&test_id=in.(" + plannedIds.join(",") + ")");
+        qids = shuffled((qres.data || []).map(r => r.id));
+      }
+      if (qids.length < 10) {
+        const allSubjIds = chapterTests.filter(t => parseTitle(t.title).subj === subj).map(t => t.id);
+        if (allSubjIds.length) {
+          const extra = await db("/questions?select=id&test_id=in.(" + allSubjIds.join(",") + ")");
+          const more = shuffled((extra.data || []).map(r => r.id)).filter(id => qids.indexOf(id) < 0);
+          qids = qids.concat(more);
+        }
+      }
+      pick.push.apply(pick, qids.slice(0, 10));
     }
-    const pick = ids.slice(0, Math.min(30, ids.length));
-    const full = await db("/questions?id=in.(" + pick.join(",") + ")&select=subject,q,a,b,c,d,correct,explanation");
+    if (!pick.length) { alert("No questions are available yet for a daily test."); return; }
+    const full = await db("/questions?id=in.(" + pick.join(",") + ")&select=id,subject,q,a,b,c,d,correct,explanation");
     const byId = {};
     (full.data || []).forEach(r => { byId[r.id] = r; });
     const ordered = pick.map(id => byId[id]).filter(Boolean);
@@ -708,7 +795,7 @@ async function fetchFullByIds(ids) {
   const out = [];
   for (let i = 0; i < ids.length; i += 40) {
     const chunk = ids.slice(i, i + 40);
-    const r = await db("/questions?id=in.(" + chunk.join(",") + ")&select=subject,q,a,b,c,d,correct,explanation");
+    const r = await db("/questions?id=in.(" + chunk.join(",") + ")&select=id,subject,q,a,b,c,d,correct,explanation");
     const byId = {};
     (r.data || []).forEach(x => { byId[x.id] = x; });
     chunk.forEach(id => { if (byId[id]) out.push(byId[id]); });
@@ -1686,6 +1773,7 @@ function renderTimetable() {
     tr.appendChild(tdD);
     body.appendChild(tr);
   });
+  renderSyllabus();
 }
 $("ttAdd").addEventListener("click", () => {
   const t = $("ttTime").value.trim();
