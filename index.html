@@ -237,6 +237,10 @@ function countFrom(headers) {
   const n = parseInt((cr.split("/")[1] || ""), 10);
   return isNaN(n) ? 0 : n;
 }
+async function rpc(fn, args) {
+  const r = await db("/rpc/" + fn, { method: "POST", body: JSON.stringify(args || {}) });
+  return r.data;
+}
 async function sha256(str) {
   const buf = await crypto.subtle.digest("SHA-256", new TextEncoder().encode(str));
   return Array.from(new Uint8Array(buf)).map(b => b.toString(16).padStart(2, "0")).join("");
@@ -257,6 +261,7 @@ function fmtDate(s) {
 
 /* ---------- session ---------- */
 let me = null;
+let adminCreds = null;
 try { me = JSON.parse(localStorage.getItem("neet-session") || "null"); } catch (e) { me = null; }
 function setSession(u) {
   me = u;
@@ -273,7 +278,7 @@ function renderShell() {
   $("navAdmin").classList.toggle("hidden", !(logged && me.role === "admin"));
   if (logged) showView("tests");
 }
-$("logoutBtn").addEventListener("click", () => { setSession(null); });
+$("logoutBtn").addEventListener("click", () => { adminCreds = null; setSession(null); });
 
 /* ---------- auth tabs ---------- */
 function authTab(which) {
@@ -303,19 +308,16 @@ $("signupBtn").addEventListener("click", async () => {
   if (pass.length < 6) { authMsg("Password must be at least 6 characters."); return; }
   $("signupBtn").disabled = true;
   try {
-    const cnt = await db("/users?select=id", { headers: { "Prefer": "count=exact", "Range": "0-0" } });
-    const isFirst = countFrom(cnt.headers) === 0;
-    const salt = randomSalt();
-    const pass_hash = await sha256(salt + ":" + pass);
-    const ins = await db("/users", {
-      method: "POST",
-      headers: { "Prefer": "return=representation" },
-      body: JSON.stringify({ username, name, gmail, pass_hash, salt, role: isFirst ? "admin" : "student" })
-    });
-    const u = ins.data[0];
-    setSession({ id: u.id, username: u.username, name: u.name, gmail: u.gmail, role: u.role });
+    const res = await rpc("app_signup", { p_username: username, p_name: name, p_gmail: gmail, p_password: pass });
+    if (!res || !res.ok) {
+      authMsg(res && res.error === "taken" ? "That username is taken. Pick another." : "Sign up failed. Try again.");
+      $("signupBtn").disabled = false;
+      return;
+    }
+    if (res.user.role === "admin") adminCreds = { u: res.user.username, p: pass };
+    setSession(res.user);
   } catch (e) {
-    authMsg(e.code === "23505" ? "That username is taken. Pick another." : ("Sign up failed: " + e.message));
+    authMsg("Sign up failed: " + e.message);
   }
   $("signupBtn").disabled = false;
 });
@@ -326,12 +328,14 @@ $("loginBtn").addEventListener("click", async () => {
   if (!username || !pass) { authMsg("Enter username and password."); return; }
   $("loginBtn").disabled = true;
   try {
-    const r = await db("/users?username=eq." + encodeURIComponent(username) + "&select=id,username,name,gmail,role,pass_hash,salt");
-    const u = (r.data || [])[0];
-    if (!u) { authMsg("No account with that username."); $("loginBtn").disabled = false; return; }
-    const h = await sha256(u.salt + ":" + pass);
-    if (h !== u.pass_hash) { authMsg("Wrong password."); $("loginBtn").disabled = false; return; }
-    setSession({ id: u.id, username: u.username, name: u.name, gmail: u.gmail, role: u.role });
+    const res = await rpc("app_login", { p_username: username, p_password: pass });
+    if (!res || !res.ok) {
+      authMsg(res && res.error === "nouser" ? "No account with that username." : "Wrong password.");
+      $("loginBtn").disabled = false;
+      return;
+    }
+    if (res.user.role === "admin") adminCreds = { u: res.user.username, p: pass };
+    setSession(res.user);
   } catch (e) {
     authMsg("Login failed: " + e.message);
   }
@@ -346,16 +350,12 @@ $("forgotBtn").addEventListener("click", async () => {
   if (pass.length < 6) { authMsg("New password must be at least 6 characters."); return; }
   $("forgotBtn").disabled = true;
   try {
-    const r = await db("/users?username=eq." + encodeURIComponent(username) + "&select=id,gmail");
-    const u = (r.data || [])[0];
-    if (!u || (u.gmail || "").toLowerCase() !== gmail) {
+    const res = await rpc("app_forgot", { p_username: username, p_gmail: gmail, p_new_password: pass });
+    if (!res || !res.ok) {
       authMsg("Username and Gmail do not match any account.");
       $("forgotBtn").disabled = false;
       return;
     }
-    const salt = randomSalt();
-    const pass_hash = await sha256(salt + ":" + pass);
-    await db("/users?id=eq." + u.id, { method: "PATCH", body: JSON.stringify({ pass_hash, salt }) });
     authMsg("Password reset done. Now log in with the new password.", true);
     authTab("login");
     authMsg("Password reset done. Now log in with the new password.", true);
@@ -397,7 +397,7 @@ async function renderProfile() {
   const box = $("profileInfo");
   box.innerHTML = '<p class="note">Loading...</p>';
   try {
-    const u = await db("/users?id=eq." + me.id + "&select=created_at");
+    const u = await db("/public_profiles?id=eq." + me.id + "&select=created_at");
     const since = (u.data || [])[0];
     const a = await db("/attempts?user_id=eq." + me.id + "&select=score,correct,wrong,skipped");
     const rows = a.data || [];
@@ -419,20 +419,17 @@ $("cpBtn").addEventListener("click", async () => {
   const nw = $("cpNew").value;
   const msg = $("cpMsg");
   if (!cur || !nw) { msg.textContent = "Enter both the current and the new password."; msg.className = "msg err"; return; }
+  if (nw.length < 6) { msg.textContent = "New password must be at least 6 characters."; msg.className = "msg err"; return; }
   $("cpBtn").disabled = true;
   try {
-    const u = await db("/users?id=eq." + me.id + "&select=pass_hash,salt");
-    const row = (u.data || [])[0];
-    const h = await sha256(row.salt + ":" + cur);
-    if (h !== row.pass_hash) {
+    const res = await rpc("app_change_password", { p_user_id: me.id, p_current: cur, p_new_password: nw });
+    if (!res || !res.ok) {
       msg.textContent = "Current password is wrong.";
       msg.className = "msg err";
       $("cpBtn").disabled = false;
       return;
     }
-    const salt = randomSalt();
-    const pass_hash = await sha256(salt + ":" + nw);
-    await db("/users?id=eq." + me.id, { method: "PATCH", body: JSON.stringify({ pass_hash, salt }) });
+    if (adminCreds) adminCreds.p = nw;
     msg.textContent = "Password changed. Use the new password next time you log in.";
     msg.className = "msg ok";
     $("cpCurrent").value = "";
@@ -913,10 +910,19 @@ let adminAttemptsCache = [];
 async function loadBoard() {
   const body = $("boardBody");
   try {
-    const [u, a] = await Promise.all([
-      db("users?select=id,username,name,role"),
-      db("attempts?select=user_id,correct,wrong,skipped")
-    ]);
+    let u, a;
+    try {
+      [u, a] = await Promise.all([
+        db("public_profiles?select=id,username,name,role"),
+        db("attempts?select=user_id,correct,wrong,skipped")
+      ]);
+    } catch (e1) {
+      await new Promise(r => setTimeout(r, 1500));
+      [u, a] = await Promise.all([
+        db("public_profiles?select=id,username,name,role"),
+        db("attempts?select=user_id,correct,wrong,skipped")
+      ]);
+    }
     if (u.error) throw new Error(u.error.message);
     if (a.error) throw new Error(a.error.message);
     const byUser = {};
@@ -946,7 +952,7 @@ async function loadBoard() {
       ? ("Your rank: #" + (myIdx + 1) + " with " + rows[myIdx].points + " points.")
       : (me && me.role === "admin" ? "You are the admin, so you are not ranked here." : "");
   } catch (e) {
-    body.innerHTML = '<tr><td colspan="6" class="note">Could not load the leaderboard: ' + esc(e.message) + "</td></tr>";
+    body.innerHTML = '<tr><td colspan="6" class="note">Could not load the leaderboard: ' + esc(e.message) + ' <button class="btn secondary" onclick="loadBoard()">Retry</button></td></tr>';
   }
 }
 
@@ -956,18 +962,33 @@ async function loadAdmin() {
   ub.innerHTML = '<tr><td colspan="6" class="note">Loading...</td></tr>';
   ab.innerHTML = '<tr><td colspan="7" class="note">Loading...</td></tr>';
   try {
-    const u = await db("/users?select=id,username,name,gmail,role,created_at&order=created_at.asc");
+    const u = await db("/public_profiles?select=id,username,name,role,created_at&order=created_at.asc");
     const a = await db("/attempts?select=*&order=created_at.desc");
     const users = u.data || [];
+    if (adminCreds) {
+      try {
+        const r = await rpc("app_admin_users", { p_username: adminCreds.u, p_password: adminCreds.p });
+        if (r && r.ok) {
+          const gm = {};
+          (r.users || []).forEach(x => { gm[x.id] = x.gmail; });
+          users.forEach(x => { x.gmail = gm[x.id] || ""; });
+        }
+      } catch (e) { /* Gmail stays hidden this session */ }
+    }
     adminAttemptsCache = a.data || [];
     const nameOf = {};
     users.forEach(x => { nameOf[x.id] = x.username; });
     ub.innerHTML = "";
+    if (!adminCreds) {
+      const tr = document.createElement("tr");
+      tr.innerHTML = '<td colspan="6" class="note">Gmail addresses are hidden because this page was reloaded. Log out and log in again to see them.</td>';
+      ub.appendChild(tr);
+    }
     users.forEach(x => {
       const mine = adminAttemptsCache.filter(at => at.user_id === x.id);
       const best = mine.length ? Math.max.apply(null, mine.map(at => at.score)) : "-";
       const tr = document.createElement("tr");
-      tr.innerHTML = "<td>" + esc(x.username) + "</td><td>" + esc(x.name || "") + "</td><td>" + esc(x.gmail) + "</td><td>" + esc(x.role) + "</td><td>" + mine.length + "</td><td>" + best + "</td>";
+      tr.innerHTML = "<td>" + esc(x.username) + "</td><td>" + esc(x.name || "") + "</td><td>" + esc(x.gmail || "-") + "</td><td>" + esc(x.role) + "</td><td>" + mine.length + "</td><td>" + best + "</td>";
       ub.appendChild(tr);
     });
     ab.innerHTML = "";
@@ -985,7 +1006,7 @@ async function loadAdmin() {
 }
 $("csvBtn").addEventListener("click", async () => {
   try {
-    const u = await db("/users?select=id,username");
+    const u = await db("/public_profiles?select=id,username");
     const nameOf = {};
     (u.data || []).forEach(x => { nameOf[x.id] = x.username; });
     let csv = "date,student,test,score,right,wrong,skipped\n";
