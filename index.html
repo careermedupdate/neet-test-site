@@ -108,6 +108,7 @@
       <button id="navTests" class="active">Tests</button>
       <button id="navMine">My records</button>
       <button id="navProfile">Profile</button>
+      <button id="navBoard">Leaderboard</button>
       <button id="navAdmin" class="hidden">All students</button>
     </nav>
 
@@ -171,6 +172,18 @@
         <input id="cpNew" type="password" autocomplete="new-password">
         <button class="btn" id="cpBtn">Change password</button>
         <div class="msg" id="cpMsg"></div>
+      </div>
+    </div>
+
+    <div id="boardView" class="hidden">
+      <div class="card">
+        <h3>Leaderboard</h3>
+        <p class="note">Ranked by points: <b>10 points for every right answer</b>. Wrong and skipped answers give 0 points. Every student can see this board.</p>
+        <p class="note" id="boardMine"></p>
+        <div class="tablewrap"><table>
+          <thead><tr><th>Rank</th><th>Student</th><th>Points</th><th>Tests</th><th>Right answers</th><th>Accuracy</th></tr></thead>
+          <tbody id="boardBody"><tr><td colspan="6" class="note">Loading...</td></tr></tbody>
+        </table></div>
       </div>
     </div>
 
@@ -357,21 +370,26 @@ function showView(v) {
   $("navTests").classList.toggle("active", v === "tests");
   $("navMine").classList.toggle("active", v === "mine");
   $("navProfile").classList.toggle("active", v === "profile");
+  $("navBoard").classList.toggle("active", v === "board");
   $("navAdmin").classList.toggle("active", v === "admin");
   $("testsView").classList.toggle("hidden", v !== "tests");
   $("mineView").classList.toggle("hidden", v !== "mine");
   $("profileView").classList.toggle("hidden", v !== "profile");
+  $("boardView").classList.toggle("hidden", v !== "board");
   $("adminView").classList.toggle("hidden", v !== "admin");
   $("runnerView").classList.add("hidden");
   $("resultView").classList.add("hidden");
+  window.scrollTo(0, 0);
   if (v === "tests") loadTests();
   if (v === "mine") loadMine();
   if (v === "profile") renderProfile();
+  if (v === "board") loadBoard();
   if (v === "admin") loadAdmin();
 }
 $("navTests").addEventListener("click", () => showView("tests"));
 $("navMine").addEventListener("click", () => showView("mine"));
 $("navProfile").addEventListener("click", () => showView("profile"));
+$("navBoard").addEventListener("click", () => showView("board"));
 $("navAdmin").addEventListener("click", () => showView("admin"));
 
 /* ---------- profile ---------- */
@@ -891,6 +909,47 @@ async function loadMine() {
 
 /* ---------- admin ---------- */
 let adminAttemptsCache = [];
+/* ---------- leaderboard: all students, ranked by points ---------- */
+async function loadBoard() {
+  const body = $("boardBody");
+  try {
+    const [u, a] = await Promise.all([
+      db("users?select=id,username,name,role"),
+      db("attempts?select=user_id,correct,wrong,skipped")
+    ]);
+    if (u.error) throw new Error(u.error.message);
+    if (a.error) throw new Error(a.error.message);
+    const byUser = {};
+    (a.data || []).forEach(at => {
+      const s = byUser[at.user_id] || (byUser[at.user_id] = { tests: 0, right: 0, wrong: 0 });
+      s.tests++; s.right += at.correct; s.wrong += at.wrong;
+    });
+    const rows = (u.data || []).filter(x => x.role !== "admin").map(x => {
+      const s = byUser[x.id] || { tests: 0, right: 0, wrong: 0 };
+      const attempted = s.right + s.wrong;
+      return { id: x.id, name: x.name || x.username, username: x.username, points: s.right * 10, tests: s.tests, right: s.right, acc: attempted ? Math.round(s.right / attempted * 100) : null };
+    }).sort((p, q) => (q.points - p.points) || ((q.acc || 0) - (p.acc || 0)) || (q.tests - p.tests));
+    if (!rows.length) {
+      body.innerHTML = '<tr><td colspan="6" class="note">No students yet.</td></tr>';
+      $("boardMine").textContent = "";
+      return;
+    }
+    body.innerHTML = "";
+    rows.forEach((r, i) => {
+      const tr = document.createElement("tr");
+      if (me && r.id === me.id) tr.style.background = "#eef4ff";
+      tr.innerHTML = "<td>" + (i + 1) + "</td><td>" + esc(r.name) + ' <span class="note">@' + esc(r.username) + "</span>" + (me && r.id === me.id ? ' <span class="note">(You)</span>' : "") + "</td><td><b>" + r.points + "</b></td><td>" + r.tests + "</td><td>" + r.right + "</td><td>" + (r.acc === null ? "-" : r.acc + "%") + "</td>";
+      body.appendChild(tr);
+    });
+    const myIdx = rows.findIndex(r => me && r.id === me.id);
+    $("boardMine").textContent = myIdx >= 0
+      ? ("Your rank: #" + (myIdx + 1) + " with " + rows[myIdx].points + " points.")
+      : (me && me.role === "admin" ? "You are the admin, so you are not ranked here." : "");
+  } catch (e) {
+    body.innerHTML = '<tr><td colspan="6" class="note">Could not load the leaderboard: ' + esc(e.message) + "</td></tr>";
+  }
+}
+
 async function loadAdmin() {
   if (me.role !== "admin") return;
   const ub = $("adminUsers"), ab = $("adminAttempts");
