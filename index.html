@@ -107,6 +107,7 @@
     <nav class="main">
       <button id="navTests" class="active">Tests</button>
       <button id="navMine">My records</button>
+      <button id="navProfile">Profile</button>
       <button id="navAdmin" class="hidden">All students</button>
     </nav>
 
@@ -154,6 +155,22 @@
           <thead><tr><th>Date</th><th>Test</th><th>Score</th><th>Right</th><th>Wrong</th><th>Skipped</th><th></th></tr></thead>
           <tbody id="mineBody"></tbody>
         </table></div>
+      </div>
+    </div>
+
+    <div id="profileView" class="hidden">
+      <div class="card">
+        <h3>My profile</h3>
+        <div id="profileInfo"><p class="note">Loading...</p></div>
+      </div>
+      <div class="card">
+        <h3>Change password</h3>
+        <label>Current password</label>
+        <input id="cpCurrent" type="password" autocomplete="current-password">
+        <label>New password</label>
+        <input id="cpNew" type="password" autocomplete="new-password">
+        <button class="btn" id="cpBtn">Change password</button>
+        <div class="msg" id="cpMsg"></div>
       </div>
     </div>
 
@@ -339,18 +356,75 @@ $("forgotBtn").addEventListener("click", async () => {
 function showView(v) {
   $("navTests").classList.toggle("active", v === "tests");
   $("navMine").classList.toggle("active", v === "mine");
+  $("navProfile").classList.toggle("active", v === "profile");
   $("navAdmin").classList.toggle("active", v === "admin");
   $("testsView").classList.toggle("hidden", v !== "tests");
   $("mineView").classList.toggle("hidden", v !== "mine");
+  $("profileView").classList.toggle("hidden", v !== "profile");
   $("adminView").classList.toggle("hidden", v !== "admin");
-  if (v !== "tests") { $("runnerView").classList.add("hidden"); $("resultView").classList.add("hidden"); $("testsView").classList.remove("hidden"); }
+  $("runnerView").classList.add("hidden");
+  $("resultView").classList.add("hidden");
   if (v === "tests") loadTests();
   if (v === "mine") loadMine();
+  if (v === "profile") renderProfile();
   if (v === "admin") loadAdmin();
 }
 $("navTests").addEventListener("click", () => showView("tests"));
 $("navMine").addEventListener("click", () => showView("mine"));
+$("navProfile").addEventListener("click", () => showView("profile"));
 $("navAdmin").addEventListener("click", () => showView("admin"));
+
+/* ---------- profile ---------- */
+async function renderProfile() {
+  const box = $("profileInfo");
+  box.innerHTML = '<p class="note">Loading...</p>';
+  try {
+    const u = await db("/users?id=eq." + me.id + "&select=created_at");
+    const since = (u.data || [])[0];
+    const a = await db("/attempts?user_id=eq." + me.id + "&select=score,correct,wrong,skipped");
+    const rows = a.data || [];
+    let stats = "No tests attempted yet.";
+    if (rows.length) {
+      const best = Math.max.apply(null, rows.map(x => x.score));
+      const avg = Math.round(rows.reduce((s, x) => s + x.score, 0) / rows.length);
+      stats = "Tests attempted: " + rows.length + " | Average score: " + avg + " | Best score: " + best;
+    }
+    box.innerHTML = '<p class="note">Name: ' + esc(me.name || "-") + "<br>Username: " + esc(me.username) +
+      "<br>Gmail: " + esc(me.gmail || "-") + "<br>Role: " + esc(me.role) +
+      (since ? "<br>Member since: " + esc(fmtDate(since.created_at)) : "") + "<br>" + stats + "</p>";
+  } catch (e) {
+    box.innerHTML = '<p class="note">Could not load your profile: ' + esc(e.message) + "</p>";
+  }
+}
+$("cpBtn").addEventListener("click", async () => {
+  const cur = $("cpCurrent").value;
+  const nw = $("cpNew").value;
+  const msg = $("cpMsg");
+  if (!cur || !nw) { msg.textContent = "Enter both the current and the new password."; msg.className = "msg err"; return; }
+  $("cpBtn").disabled = true;
+  try {
+    const u = await db("/users?id=eq." + me.id + "&select=pass_hash,salt");
+    const row = (u.data || [])[0];
+    const h = await sha256(row.salt + ":" + cur);
+    if (h !== row.pass_hash) {
+      msg.textContent = "Current password is wrong.";
+      msg.className = "msg err";
+      $("cpBtn").disabled = false;
+      return;
+    }
+    const salt = randomSalt();
+    const pass_hash = await sha256(salt + ":" + nw);
+    await db("/users?id=eq." + me.id, { method: "PATCH", body: JSON.stringify({ pass_hash, salt }) });
+    msg.textContent = "Password changed. Use the new password next time you log in.";
+    msg.className = "msg ok";
+    $("cpCurrent").value = "";
+    $("cpNew").value = "";
+  } catch (e) {
+    msg.textContent = "Could not change the password: " + e.message;
+    msg.className = "msg err";
+  }
+  $("cpBtn").disabled = false;
+});
 </script>
 <script>
 "use strict";
