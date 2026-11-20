@@ -733,17 +733,34 @@ function subjectStats(questions, answers) {
     return { subj: s, total: st.total, right: st.right, wrong: st.wrong, skipped: st.skipped, score: st.right * 4 - st.wrong, acc: att ? Math.round(st.right / att * 100) : null };
   });
 }
+function donutHtml(r, w, s, centre) {
+  const tot = (r + w + s) || 1;
+  const rp = Math.round(r / tot * 100);
+  const wp = Math.round(w / tot * 100);
+  return '<div style="width:120px;height:120px;border-radius:50%;background:conic-gradient(#16a34a 0% ' + rp + '%, #dc2626 ' + rp + '% ' + (rp + wp) + '%, #9ca3af ' + (rp + wp) + '% 100%);display:flex;align-items:center;justify-content:center;flex:none">' +
+    '<div style="width:72px;height:72px;border-radius:50%;background:#fff;display:flex;align-items:center;justify-content:center;font-weight:700">' + centre + '</div></div>';
+}
 function analysisHtml(questions, attempt) {
   const stats = subjectStats(questions, attempt.answers || {});
   const attempted = attempt.correct + attempt.wrong;
   const acc = attempted ? Math.round(attempt.correct / attempted * 100) : 0;
   let h = '<div class="card"><h3>Detailed analysis</h3>' +
     '<p class="note">Accuracy: ' + acc + '% of the questions you attempted. Attempted: ' + attempted + ' of ' + questions.length + '.</p>' +
+    '<div style="display:flex;gap:16px;align-items:center;flex-wrap:wrap;margin:10px 0">' + donutHtml(attempt.correct, attempt.wrong, attempt.skipped, acc + "%") +
+    '<p class="note" style="margin:0">Right: ' + attempt.correct + "<br>Wrong: " + attempt.wrong + "<br>Skipped: " + attempt.skipped + "<br>Centre of the chart: your accuracy.</p></div>" +
     '<div class="tablewrap"><table><thead><tr><th>Subject</th><th>Questions</th><th>Right</th><th>Wrong</th><th>Skipped</th><th>Score</th><th>Accuracy</th></tr></thead><tbody>';
   stats.forEach(st => {
     h += "<tr><td>" + esc(st.subj) + "</td><td>" + st.total + "</td><td>" + st.right + "</td><td>" + st.wrong + "</td><td>" + st.skipped + "</td><td>" + st.score + "</td><td>" + (st.acc === null ? "-" : st.acc + "%") + "</td></tr>";
   });
   h += "</tbody></table></div>";
+  stats.forEach(st => {
+    if (st.acc === null) {
+      h += '<p class="note" style="margin:8px 0 2px">' + esc(st.subj) + ": not attempted</p>";
+      return;
+    }
+    h += '<p class="note" style="margin:8px 0 2px">' + esc(st.subj) + ": " + st.acc + "% accuracy (" + st.right + " right of " + (st.right + st.wrong) + " attempted)</p>" +
+      '<div style="background:#e5e7eb;border-radius:6px;height:10px"><div style="background:#1d4ed8;height:10px;border-radius:6px;width:' + st.acc + '%"></div></div>';
+  });
   const tried = stats.filter(st => st.acc !== null);
   if (tried.length > 1) {
     let weak = tried[0];
@@ -752,6 +769,25 @@ function analysisHtml(questions, attempt) {
   }
   h += "</div>";
   return h;
+}
+
+/* ---------- review filters: proper analysis while reviewing ---------- */
+let revF = "all", revS = "all";
+function reviewFilter(kind, val) {
+  if (kind === "res") revF = val; else revS = val;
+  let visible = 0;
+  document.querySelectorAll("#resultView .revq").forEach(el => {
+    const show = (revF === "all" || el.dataset.res === revF) && (revS === "all" || el.dataset.subj === revS);
+    el.style.display = show ? "" : "none";
+    if (show) visible++;
+  });
+  const none = $("revNone");
+  if (none) none.style.display = visible ? "none" : "";
+  document.querySelectorAll("#resultView .revbtn").forEach(b => {
+    const active = (b.dataset.k === "res" && b.dataset.v === revF) || (b.dataset.k === "subj" && b.dataset.v === revS);
+    b.style.background = active ? "#1d4ed8" : "";
+    b.style.color = active ? "#fff" : "";
+  });
 }
 
 async function showResult(attemptId, auto) {
@@ -768,10 +804,25 @@ async function showResult(attemptId, auto) {
       '<div class="score">' + attempt.score + " / " + (qs.data.length * 4) + "</div>" +
       '<p class="note">Right: ' + attempt.correct + " | Wrong: " + attempt.wrong + " | Skipped: " + attempt.skipped + " | " + esc(fmtDate(attempt.created_at)) + "</p></div>";
     html += analysisHtml(qs.data || [], attempt);
+    const qlist = qs.data || [];
+    const subjects = [];
+    qlist.forEach(q => { if (q.subject && subjects.indexOf(q.subject) < 0) subjects.push(q.subject); });
     html += '<div class="card"><h3>Answer review</h3>';
-    (qs.data || []).forEach((q, i) => {
+    html += '<p class="note">Show: ' +
+      '<button class="btn secondary revbtn" data-k="res" data-v="all" onclick="reviewFilter(\'res\',\'all\')">All (' + qlist.length + ')</button> ' +
+      '<button class="btn secondary revbtn" data-k="res" data-v="wrong" onclick="reviewFilter(\'res\',\'wrong\')">Wrong (' + attempt.wrong + ')</button> ' +
+      '<button class="btn secondary revbtn" data-k="res" data-v="skipped" onclick="reviewFilter(\'res\',\'skipped\')">Skipped (' + attempt.skipped + ')</button> ' +
+      '<button class="btn secondary revbtn" data-k="res" data-v="right" onclick="reviewFilter(\'res\',\'right\')">Right (' + attempt.correct + ')</button></p>';
+    if (subjects.length > 1) {
+      html += '<p class="note">Subject: <button class="btn secondary revbtn" data-k="subj" data-v="all" onclick="reviewFilter(\'subj\',\'all\')">All</button>';
+      subjects.forEach(s => { html += ' <button class="btn secondary revbtn" data-k="subj" data-v="' + esc(s) + '" onclick="reviewFilter(\'subj\',\'' + esc(s) + '\')">' + esc(s) + '</button>'; });
+      html += '</p>';
+    }
+    html += '<p class="note" id="revNone" style="display:none">No questions in this filter.</p>';
+    qlist.forEach((q, i) => {
       const picked = attempt.answers[q.id];
-      html += '<div style="margin-bottom:14px"><div class="qtext">Q' + (i + 1) + ". " + withImg(q.q) + "</div>";
+      const res = (picked === null || picked === undefined) ? "skipped" : (picked === q.correct ? "right" : "wrong");
+      html += '<div class="revq" data-res="' + res + '" data-subj="' + esc(q.subject || "General") + '" style="margin-bottom:14px"><div class="qtext">Q' + (i + 1) + ". " + withImg(q.q) + "</div>";
       ["a", "b", "c", "d"].forEach((key, oi) => {
         let cls = "opt";
         if (oi === q.correct) cls += " right";
@@ -782,6 +833,7 @@ async function showResult(attemptId, auto) {
     });
     html += '<button class="btn" onclick="showView(\'tests\')">Back to tests</button></div>';
     box.innerHTML = html;
+    revF = "all"; revS = "all"; reviewFilter("res", "all");
   } catch (e) {
     box.innerHTML = '<div class="card"><p class="msg err">Could not load the result: ' + esc(e.message) + "</p></div>";
   }
@@ -806,9 +858,10 @@ async function loadMine() {
     const accAll = attAll ? Math.round(totR / attAll * 100) : 0;
     const bestAll = Math.max.apply(null, rows.map(x => x.score));
     const avgAll = Math.round(rows.reduce((s, x) => s + x.score, 0) / rows.length);
-    $("mineAnalysis").innerHTML = '<p class="note">Tests attempted: ' + rows.length + " | Average score: " + avgAll + " | Best score: " + bestAll + "<br>" +
+    $("mineAnalysis").innerHTML = '<div style="display:flex;gap:16px;align-items:center;flex-wrap:wrap">' + donutHtml(totR, totW, totS, accAll + "%") +
+      '<p class="note" style="margin:0">Tests attempted: ' + rows.length + " | Average score: " + avgAll + " | Best score: " + bestAll + "<br>" +
       "Total right: " + totR + " | Total wrong: " + totW + " | Total skipped: " + totS + " | Overall accuracy: " + accAll + "% of attempted questions.<br>" +
-      "Tap Review on any test below to see its subject-wise detailed analysis.</p>";
+      "Tap Review on any test below to see its subject-wise detailed analysis.</p></div>";
     body.innerHTML = "";
     rows.forEach(at => {
       const test = testsCache.find(t => t.id === at.test_id);
