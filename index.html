@@ -346,17 +346,32 @@ function setSession(u) {
   if (u) localStorage.setItem("neet-session", JSON.stringify(u));
   else localStorage.removeItem("neet-session");
   renderShell();
+refreshMyProfile();
 }
 function renderShell() {
   const logged = !!me;
   $("authView").classList.toggle("hidden", logged);
   $("appView").classList.toggle("hidden", !logged);
   $("logoutBtn").classList.toggle("hidden", !logged);
-  $("who").textContent = logged ? (me.username + (me.role === "admin" ? " (admin)" : "")) : "";
+  $("who").textContent = logged ? ((me.name || me.username) + (me.role === "admin" ? " (admin)" : "")) : "";
   $("navAdmin").classList.toggle("hidden", !(logged && me.role === "admin"));
   if (logged) showView("tests");
 }
 $("logoutBtn").addEventListener("click", () => { adminCreds = null; setSession(null); });
+async function refreshMyProfile() {
+  if (!me) return;
+  try {
+    const r = await db("/public_profiles?select=id,username,name,role&id=eq." + me.id);
+    const row = (r.data || [])[0];
+    if (row && (row.name !== me.name || row.role !== me.role || row.username !== me.username)) {
+      me.name = row.name;
+      me.role = row.role;
+      me.username = row.username;
+      localStorage.setItem("neet-session", JSON.stringify(me));
+      $("who").textContent = (me.name || me.username) + (me.role === "admin" ? " (admin)" : "");
+    }
+  } catch (e) {}
+}
 
 /* ---------- auth tabs ---------- */
 function authTab(which) {
@@ -591,6 +606,7 @@ async function loadTests() {
     for (const test of testsCache) {
       if (isDailyTest(test) || isGenerated(test)) continue;
       const p = parseTitle(test.title);
+      if (p.inst === "General") continue;
       if (!insts[p.inst]) { insts[p.inst] = []; instOrder.push(p.inst); }
       insts[p.inst].push(test);
     }
@@ -1806,7 +1822,7 @@ $("ttReset").addEventListener("click", () => {
 function renderSearch(q) {
   const list = $("testList");
   list.innerHTML = "";
-  const hits = testsCache.filter(t => !isDailyTest(t) && !isGenerated(t)).filter(t => {
+  const hits = testsCache.filter(t => !isDailyTest(t) && !isGenerated(t) && parseTitle(t.title).inst !== "General").filter(t => {
     const p = parseTitle(t.title);
     return (p.inst + " " + p.subj + " " + p.chap).toLowerCase().indexOf(q) >= 0;
   });
@@ -1851,6 +1867,7 @@ paintThemeBtn();
 
 /* ---------- boot ---------- */
 renderShell();
+refreshMyProfile();
 </script>
 </body>
 </html>
