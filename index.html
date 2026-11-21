@@ -290,6 +290,7 @@ const $ = (id) => document.getElementById(id);
 
 async function db(path, opts) {
   opts = opts || {};
+  if (path.charAt(0) !== "/") path = "/" + path;
   const headers = Object.assign({
     "apikey": SUPABASE_ANON_KEY,
     "Authorization": "Bearer " + SUPABASE_ANON_KEY,
@@ -1519,14 +1520,14 @@ async function loadBoard() {
     let u, a;
     try {
       [u, a] = await Promise.all([
-        db("public_profiles?select=id,username,name,role"),
-        db("attempts?select=user_id,correct,wrong,skipped")
+        db("/public_profiles?select=id,username,name,role"),
+        db("/attempts?select=user_id,correct,wrong,skipped")
       ]);
     } catch (e1) {
       await new Promise(r => setTimeout(r, 1500));
       [u, a] = await Promise.all([
-        db("public_profiles?select=id,username,name,role"),
-        db("attempts?select=user_id,correct,wrong,skipped")
+        db("/public_profiles?select=id,username,name,role"),
+        db("/attempts?select=user_id,correct,wrong,skipped")
       ]);
     }
     if (u.error) throw new Error(u.error.message);
