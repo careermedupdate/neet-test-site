@@ -33,6 +33,8 @@
   nav.main button.active { background: #1d4ed8; color: #fff; border-color: #1d4ed8; }
   table { width: 100%; border-collapse: collapse; font-size: 14px; }
   th, td { border-bottom: 1px solid #e3e8f2; padding: 7px 6px; text-align: left; }
+  tr.meRow { background: #eef4ff; }
+  html[data-theme="dark"] tr.meRow { background: #22335c; }
   th { color: #5b6b82; font-size: 12px; text-transform: uppercase; letter-spacing: .04em; }
   .qtext { font-size: 16px; line-height: 1.55; margin-bottom: 12px; }
   .opt { display: block; width: 100%; text-align: left; padding: 11px 12px; margin-bottom: 8px; border: 1px solid #c3ccd9; border-radius: 8px; background: #fff; cursor: pointer; font-size: 15px; }
@@ -1550,7 +1552,7 @@ async function loadBoard() {
     body.innerHTML = "";
     rows.forEach((r, i) => {
       const tr = document.createElement("tr");
-      if (me && r.id === me.id) tr.style.background = "#eef4ff";
+      if (me && r.id === me.id) tr.className = "meRow";
       tr.innerHTML = "<td>" + (i + 1) + "</td><td>" + esc(r.name) + ' <span class="note">@' + esc(r.username) + "</span>" + (me && r.id === me.id ? ' <span class="note">(You)</span>' : "") + "</td><td><b>" + r.points + "</b></td><td>" + r.tests + "</td><td>" + r.right + "</td><td>" + (r.acc === null ? "-" : r.acc + "%") + "</td>";
       body.appendChild(tr);
     });
